@@ -10,7 +10,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 ## Notes
 
 - Vocabulary: see `GLOSSARY.md` (**Renderer** = foliate-js; **Shell** = the native app hosting it; **Reader page** = the shared page through which a Shell drives the Renderer).
-- Approach decided: a native Swift Shell under `macos/` (ADR `docs/adr/0001-native-swift-shell-for-macos.md`). It shares `src/foliate-js` and the Reader page (`src/reader/`) unchanged.
+- Approach decided: a native Swift Shell under `macos/` (ADR `docs/adr/0001-native-swift-shell-for-macos.md`). It shares `src/foliate-js` and the Reader page (`src/reader/`). Shared changes must be Linux-inert: additive only, with Linux behaviour unchanged.
 - Linux behaviour must not regress; macOS changes stay behind platform boundaries.
 - macOS uses the same user-data format as Linux (progress, annotations, bookmarks), so data can move between machines.
 - Required features: core reading (all Renderer formats, PDF included) and the library. Linux-only integrations may be dropped or stubbed.
@@ -18,6 +18,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Decisions so far
 
+- [Grilling: Spec the reader-only first milestone](issues/08-spec-reader-only-milestone.md): a tracer bullet first (scheme and CSP, file-input loading with an additive fallback, pdf.js worker, PDF speed targets), then the minimal reader. Data in Application Support or `$XDG_DATA_HOME`. Bundle ID `io.github.lucag.Foliate`. Done includes a round trip with Linux.
 - [Grilling: How pdf.js copes with older Safari on macOS 14](issues/07-pdfjs-safari-compat.md): require Safari 26.2+, checked at startup by a Shell-injected script with a prompt to update. Fallback: ship pdf.js's legacy build on macOS.
 - [Grilling: Choose the porting approach](issues/06-choose-approach.md): a new native macOS Shell in Swift (SwiftUI first, AppKit where needed) under `macos/`, built by an Xcode project. The shared Reader page stays unchanged. The first milestone is a reader-only app. ADR 0001 records the decision.
 - [Research: Native Shell options for macOS](issues/02-native-shell-options.md): Swift and Tauri both run WKWebView. Swift keeps the reader page and lazy book loading unchanged but rewrites about 6,400 lines of Shell code. Tauri allows a web-based Shell UI but needs new book delivery and a messaging shim. The GTK Shell with WKWebView isn't worth it.
@@ -29,7 +30,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 - Library and file access on macOS: how books are found, imported and remembered across launches.
 - Native TTS replacement (e.g. AVSpeechSynthesizer) for the speech-dispatcher path. Likely the hardest native piece, because macOS speech handles SSML marks differently from speech-dispatcher.
-- What replaces GSettings for preferences on macOS. The user-data location for the first milestone is in the reader-only milestone ticket.
+- What replaces GSettings for preferences on macOS.
 - OPDS catalog and dictionary/lookup support in the Swift Shell.
 - macOS conventions: menu bar, keyboard shortcuts, window and tab behaviour, settings.
 - Translations: reusing `po/` gettext catalogs from Swift (and the Reader page's `uiText`).

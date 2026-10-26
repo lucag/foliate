@@ -11,6 +11,6 @@ Foliate runs on macOS through a new Shell written in Swift (SwiftUI first, with 
 
 ## Consequences
 
-- There are two Shells to maintain. The Reader page (`src/reader/`) stays shared and unchanged. macOS differences come in through injected user scripts, never through edits that affect Linux.
+- There are two Shells to maintain. The Reader page (`src/reader/`) stays shared. macOS differences come in through injected user scripts. Any change to shared code must be Linux-inert: additive only (e.g. a new entry point Linux never calls), with Linux behaviour unchanged.
 - macOS uses the same user-data JSON format as Linux.
 - Upstream acceptance was not a deciding factor.
