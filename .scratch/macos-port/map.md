@@ -18,6 +18,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Decisions so far
 
+- [Grilling: How pdf.js copes with older Safari on macOS 14](issues/07-pdfjs-safari-compat.md): require Safari 26.2+, checked at startup by a Shell-injected script with a prompt to update. Fallback: ship pdf.js's legacy build on macOS.
 - [Grilling: Choose the porting approach](issues/06-choose-approach.md): a new native macOS Shell in Swift (SwiftUI first, AppKit where needed) under `macos/`, built by an Xcode project. The shared Reader page stays unchanged. The first milestone is a reader-only app. ADR 0001 records the decision.
 - [Research: Native Shell options for macOS](issues/02-native-shell-options.md): Swift and Tauri both run WKWebView. Swift keeps the reader page and lazy book loading unchanged but rewrites about 6,400 lines of Shell code. Tauri allows a web-based Shell UI but needs new book delivery and a messaging shim. The GTK Shell with WKWebView isn't worth it.
 - [Research: Can GTK4, libadwaita, GJS and WebKitGTK 6.0 run on macOS?](issues/01-gtk-stack-on-macos.md): GTK4, libadwaita and GJS are packaged and recent enough. WebKitGTK 6.0 has no working macOS build anywhere, so porting the GTK Shell as-is means building it ourselves without GPU acceleration. A from-source build is worth only a time-boxed try.
@@ -42,3 +43,5 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 - Tracker integration and full Linux feature parity.
 - Electron as the Shell technology (standing preference).
 - [Task: Try a from-source build of the GTK app on Intel macOS](issues/05-from-source-build.md): no working WebKitGTK 6.0 build exists on macOS, so the user dropped the experiment. The porting decision rests on research.
+- Possible PDF breakage on Linux with pre-2026 WebKitGTK (`Map.prototype.getOrInsertComputed`): a pre-existing Linux bug, not porting work. File it upstream with foliate-js once confirmed. See [Grilling: How pdf.js copes with older Safari on macOS 14](issues/07-pdfjs-safari-compat.md).
+- pdf.js WASM decoders (JPEG 2000, ICC colour, JBIG2) missing from foliate-js: a Renderer feature gap on both platforms. **Next effort**: the user wants this tackled soon, as its own map.

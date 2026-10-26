@@ -12,5 +12,6 @@ What exactly does the reader-only macOS app (see the Answer in `06-choose-approa
 - the JS↔Swift bridge: message handlers, the token/promise RPC, and injected user scripts (uiText, appearance, fonts as CSS);
 - whether the pdf.js worker loads over the custom scheme, and acceptable PDF performance;
 - whether PDF recolouring is part of the milestone;
+- the Safari 26.2+ startup check and its user-facing message (decided in `07-pdfjs-safari-compat.md`);
 - where user data lives on macOS for this milestone, keeping the Linux JSON format;
 - the definition of done, including what to check on Intel and Apple Silicon.
