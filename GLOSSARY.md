@@ -11,3 +11,7 @@ _Avoid_: engine, viewer
 **Shell**:
 The native application hosting the Renderer: windows, library, settings, file access and platform integration. On Linux it is the GJS/GTK app; a platform port may supply a different Shell around the same Renderer.
 _Avoid_: frontend, wrapper, host app
+
+**Reader page**:
+The web page, shared by every Shell, that loads the Renderer and is the Shell's only channel to it.
+_Avoid_: reader view, webview page
