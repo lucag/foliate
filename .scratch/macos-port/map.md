@@ -18,6 +18,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Decisions so far
 
+- [Research: What dark mode recolours and what it leaves alone](issues/16-dark-mode-images-vs-figures.md): recolour ink (text, vectors, stencils, scans), keep photos dimmed, and keep hue with a `color` blend pass. Photos come back from the private operator list or pixel detection (corrects `04`). For reflowable books, drop the opaque image background, dim photos, and recolour detected line art with an SVG filter.
 - [Grilling: Read-aloud in the Swift Shell](issues/15-tts-in-swift-shell.md): `AVSpeechSynthesizer` behind the existing TTS contract. The `<emphasis level>` fix goes in foliate-js, speed and pitch in `<prosody>`, and pause is native. A macOS-only voice picker, a Read Aloud popover in the pill, and Edit › Speech menus. Narrated EPUBs are included. Third milestone, checked on macOS 14 in a VM.
 - [Grilling: Library and file access on macOS](issues/13-library-and-file-access.md): books stay in place, and the library is every per-book JSON in the shared folder. The app writes Linux's `uri-store.json` plus a macOS-only bookmark side file to find moved books, falling back to Locate…. A separate Library window. The library is the second milestone.
 - [Grilling: How Renderer changes reach foliate-js](issues/11-foliate-js-upstream-or-fork.md): a temporary fork `lucag/foliate-js` (branch `foliate-macos`, based on the current pin, upstream merged in, never rebased), with each change also sent upstream as a PR. One commit for both platforms. The fork is created by the first ticket that needs it; the reader-only milestone doesn't.
@@ -40,7 +41,6 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
 - Packaging: DMG layout, possibly a Homebrew cask; CI for macOS builds.
 
-- How dark-mode pages should look: likely a prototype comparing recolouring options on the same PDF and EPUB, once `issues/16-dark-mode-images-vs-figures.md` reports.
 
 ## Out of scope
 

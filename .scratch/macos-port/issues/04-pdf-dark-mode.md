@@ -24,3 +24,7 @@ Findings: branch `research/pdf-dark-mode`, file `.scratch/macos-port/research/pd
 - **Caveat:** this was not tested in a live web view. The conclusions come from reading the code.
 
 The full findings are on branch `research/pdf-dark-mode`, commit `1157be5`.
+
+## Comments
+
+Corrected by `16-dark-mode-images-vs-figures.md`: the blend-mode recolour flips hues unless the original is drawn back with `globalCompositeOperation = 'color'`. And `recordedBBoxes` can't be matched by position against `getOperatorList()`: it indexes the render's own merged operator list.
