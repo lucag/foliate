@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE, throwaway. Ticket: .scratch/macos-port/issues/19-design-dark-mode-pages.md
+  Plan: render the same test pages (text PDF, scanned PDF, EPUB chapter) under each dark-mode
+  option, in three dark themes and three photo-dimming levels, side by side or one at a time.
+  Run: macos/prototype-dark-mode/run.sh   (serves the repo, opens a WKWebView)
+  URL params: theme=default|sepia|nord  dim=100|85|80  page=text|scan|epub
+              view=compare|single  opt=<option key>  outlines=1  charts=keep|recolour
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dark-mode pages prototype</title>
+<style>
+:root { color-scheme: dark; --ui: #1b1b1d; --ui-fg: #e8e8ea; --ui-dim: #8d8d93; --ui-line: #3a3a3e; --accent: #0a84ff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #111; color: var(--ui-fg); font: 13px -apple-system, system-ui, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  padding: 8px 14px; background: var(--ui); border-bottom: 1px solid var(--ui-line); }
+header .tag { background: #ff9f0a; color: #000; font-weight: 700; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+.seg { display: inline-flex; border: 1px solid var(--ui-line); border-radius: 6px; overflow: hidden; }
+.seg button { background: none; color: var(--ui-fg); border: 0; padding: 4px 9px; font: inherit; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--ui-line); }
+.seg button.on { background: var(--accent); color: #fff; }
+label.k { color: var(--ui-dim); margin-right: 4px; }
+main { padding: 14px; display: flex; gap: 14px; align-items: flex-start; }
+#stage { flex: 1; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+#stage.single { grid-template-columns: minmax(0, 720px); justify-content: center; }
+.tile { display: flex; flex-direction: column; gap: 6px; }
+.tile h3 { margin: 0; font-size: 13px; }
+.tile .sub { color: var(--ui-dim); font-size: 11px; min-height: 2.6em; }
+.page { position: relative; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 1px #000, 0 6px 20px rgba(0,0,0,.5); }
+.page canvas { display: block; width: 100%; cursor: zoom-in; }
+.page iframe { display: block; width: 100%; border: 0; }
+.stats { font: 11px ui-monospace, monospace; color: var(--ui-dim); white-space: pre-wrap; }
+aside { width: 330px; flex: none; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 60px; }
+aside pre { margin: 0; padding: 10px; background: var(--ui); border: 1px solid var(--ui-line); border-radius: 6px;
+  font: 11px ui-monospace, monospace; white-space: pre-wrap; max-height: 60vh; overflow: auto; }
+.mock { background: #2a2a2d; border: 1px solid #444; border-radius: 10px; padding: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.mock h4 { margin: 0 0 8px; font-size: 11px; color: var(--ui-dim); text-transform: uppercase; letter-spacing: .04em; }
+.mock .row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.mock .grey { color: var(--ui-dim); }
+.mock .menu div { padding: 3px 8px; border-radius: 4px; } .mock .menu .hl { background: var(--accent); }
+#switcher { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 9; display: flex; gap: 10px;
+  align-items: center; background: #fff; color: #000; padding: 6px 10px; border-radius: 999px; box-shadow: 0 6px 24px rgba(0,0,0,.6); font-weight: 600; }
+#switcher button { border: 0; background: #eee; border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 14px; }
+#loupe { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.85); overflow: auto; cursor: zoom-out; }
+#loupe canvas { display: block; margin: 20px auto; }
+#loupe .hint { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); color: #fff; background: #000a; padding: 4px 10px; border-radius: 6px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header id="bar"></header>
+<main><div id="stage"></div><aside id="side"></aside></main>
+<div id="switcher" hidden></div>
+<div id="loupe" hidden></div>
+<script type="module">
+import '../../src/foliate-js/vendor/pdfjs/pdf.mjs'
+const pdfjsLib = globalThis.pdfjsLib
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('../../src/foliate-js/vendor/pdfjs/pdf.worker.mjs', import.meta.url).toString()
+const { OPS } = pdfjsLib
+
+// dark halves of src/themes.js
+const THEMES = {
+  default: { label: 'Default dark', fg: '#e0e0e0', bg: '#222222', link: '#77bbee' },
+  sepia: { label: 'Sepia dark', fg: '#ffd595', bg: '#342e25', link: '#48d1cc' },
+  nord: { label: 'Nord dark', fg: '#d8dee9', bg: '#2e3440', link: '#88c0d0' },
+}
+const PAGES = { text: 'Text PDF', scan: 'Scanned PDF', epub: 'EPUB chapter' }
+const OPTIONS = {
+  pdf: {
+    today: ['Today', 'Plain pdf.js render. No theme at all: a white page.'],
+    invert: ['Invert Colors', 'Today’s “Invert Colors in Dark Mode”: CSS invert(1) hue-rotate(180deg). Photos become negatives.'],
+    recolour: ['Recolour all', 'Blend-mode remap to the theme, hue kept (04 + 16). Photos become tinted negatives.'],
+    'smart-ops': ['Smart · operator list', 'Recolour, then put raster images back from pdf.js’s private render operator list. Images > 50% of the page stay recoloured.'],
+    'smart-pixels': ['Smart · pixel detection', 'Recolour, then put back tiles that look like photos (many tones, little paper). No pdf.js internals.'],
+  },
+  epub: {
+    today: ['Today', 'getCSS dark rules: opaque theme bg on every element, img and svg included.'],
+    invert: ['Invert Colors', 'Today’s “Invert Colors in Dark Mode”: inverted theme, whole page filtered.'],
+    recolour: ['Recolour all', 'Every img and svg through a same-document SVG filter: invert, hue-rotate 180°, map to theme fg/bg.'],
+    smart: ['Smart', 'Per-image 32×32 check: line art recoloured, photos dimmed, saturated charts per the Charts switch.'],
+  },
+}
+
+// ---------- state ----------
+const q = new URLSearchParams(location.search)
+const S = {
+  theme: q.get('theme') ?? 'default', dim: +(q.get('dim') ?? 85), page: q.get('page') ?? 'text',
+  view: q.get('view') ?? 'compare', opt: q.get('opt') ?? null, outlines: q.get('outlines') === '1',
+  charts: q.get('charts') ?? 'keep',
+}
+const kind = () => S.page === 'epub' ? 'epub' : 'pdf'
+const optKeys = () => Object.keys(OPTIONS[kind()])
+const syncURL = () => {
+  const p = new URLSearchParams({ theme: S.theme, dim: S.dim, page: S.page, view: S.view, charts: S.charts })
+  if (S.opt) p.set('opt', S.opt)
+  if (S.outlines) p.set('outlines', '1')
+  history.replaceState(null, '', '?' + p)
+}
+const stats = {} // per option, shown in the state panel
+
+// ---------- colour helpers ----------
+const rgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16))
+// src/utils.js invertColor: invert, then the CSS hue-rotate(180deg) matrix
+const invertHex = hex => {
+  const [r, g, b] = rgb(hex).map(v => 255 - v), lr = 0.2126, lg = 0.7152, lb = 0.0722, cos = -1, sin = 0
+  const out = [
+    r * (lr + (1 - lr) * cos - lr * sin) + g * (lg - lg * cos - lg * sin) + b * (lb - lb * cos + (1 - lb) * sin),
+    r * (lr - lr * cos + 0.143 * sin) + g * (lg + (1 - lg) * cos + 0.140 * sin) + b * (lb - lb * cos - 0.283 * sin),
+    r * (lr - lr * cos - (1 - lr) * sin) + g * (lg - lg * cos + lg * sin) + b * (lb + (1 - lb) * cos + lb * sin),
+  ]
+  return '#' + out.map(x => Math.round(Math.max(0, Math.min(255, x))).toString(16).padStart(2, '0')).join('')
+}
+
+// ---------- PDF ----------
+const SCALE = 2
+const pdfCache = {}
+async function loadPDF(name) {
+  if (pdfCache[name]) return pdfCache[name]
+  const t0 = performance.now()
+  const doc = await pdfjsLib.getDocument({
+    url: `assets/${name}.pdf`,
+    cMapUrl: '../../src/foliate-js/vendor/pdfjs/cmaps/', standardFontDataUrl: '../../src/foliate-js/vendor/pdfjs/standard_fonts/',
+  }).promise
+  const page = await doc.getPage(1)
+  const viewport = page.getViewport({ scale: SCALE })
+  const orig = document.createElement('canvas')
+  orig.width = viewport.width; orig.height = viewport.height
+  await page.render({ canvasContext: orig.getContext('2d'), viewport, recordOperations: true }).promise
+  const renderMs = performance.now() - t0
+  // the render intent's operator list is private; match it to recordedBBoxes by length
+  const bboxes = page.recordedBBoxes
+  const intent = [...(page._intentStates?.values() ?? [])].find(s => s.operatorList?.fnArray?.length === bboxes?.length)
+  const fnArray = intent?.operatorList.fnArray
+  return pdfCache[name] = { page, orig, renderMs, bboxes, fnArray }
+}
+
+const copyCanvas = src => {
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height
+  c.getContext('2d').drawImage(src, 0, 0); return c
+}
+// 04 + 16: invert lightness, keep hue, then map black→fg and white→bg
+function recolour(orig, theme) {
+  const c = copyCanvas(orig), ctx = c.getContext('2d'), { width: w, height: h } = c
+  const fg = rgb(theme.fg), bg = rgb(theme.bg)
+  ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h)
+  ctx.globalCompositeOperation = 'color'; ctx.drawImage(orig, 0, 0)
+  ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${fg.map((v, i) => v - bg[i])})`; ctx.fillRect(0, 0, w, h)
+  ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, w, h)
+  ctx.globalCompositeOperation = 'source-over'
+  return c
+}
+function restore(ctx, orig, [x, y, w, h], dim) {
+  ctx.save()
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip()
+  ctx.drawImage(orig, 0, 0)
+  if (dim < 100) { ctx.globalCompositeOperation = 'multiply'; const d = Math.round(dim * 2.55); ctx.fillStyle = `rgb(${d},${d},${d})`; ctx.fillRect(x, y, w, h) }
+  ctx.restore()
+}
+const RASTER = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintInlineImageXObjectGroup, OPS.paintImageXObjectRepeat])
+function opBoxes({ orig, bboxes, fnArray }) {
+  if (!fnArray) return { boxes: [], note: 'private operator list missing: nothing restored' }
+  const W = orig.width, H = orig.height, boxes = [], skipped = []
+  for (let i = 0; i < fnArray.length; i++) {
+    if (!RASTER.has(fnArray[i]) || bboxes.isEmpty(i)) continue
+    const b = [bboxes.minX(i) * W, bboxes.minY(i) * H, (bboxes.maxX(i) - bboxes.minX(i)) * W, (bboxes.maxY(i) - bboxes.minY(i)) * H].map(Math.round)
+    ;(b[2] * b[3] > 0.5 * W * H ? skipped : boxes).push(b)
+  }
+  return { boxes, skipped, note: `${fnArray.length} ops; ${boxes.length} raster box(es) restored, ${skipped.length} skipped as > 50% of page` }
+}
+// photo tiles: 4× downsample, 16-px tiles (64 device px); photo = little paper and many tones/colours
+const DS = 4, T = 16, PAPER_TOL = 22
+function pixelBoxes(orig) {
+  const sw = Math.ceil(orig.width / DS), sh = Math.ceil(orig.height / DS)
+  const s = document.createElement('canvas'); s.width = sw; s.height = sh
+  const sctx = s.getContext('2d', { willReadFrequently: true }); sctx.drawImage(orig, 0, 0, sw, sh)
+  const { data } = sctx.getImageData(0, 0, sw, sh)
+  // paper = the page's most common colour (4-bit buckets), averaged
+  const freq = new Map()
+  for (let i = 0; i < data.length; i += 16) { const k = (data[i] >> 4) << 8 | (data[i + 1] >> 4) << 4 | data[i + 2] >> 4; freq.set(k, (freq.get(k) ?? 0) + 1) }
+  const pk = [...freq].sort((a, b) => b[1] - a[1])[0][0], paperRGB = [pk >> 8, pk >> 4 & 15, pk & 15].map(v => v * 16 + 8)
+  const isPaper = (r, g, b) => Math.abs(r - paperRGB[0]) <= PAPER_TOL && Math.abs(g - paperRGB[1]) <= PAPER_TOL && Math.abs(b - paperRGB[2]) <= PAPER_TOL
+  const cols_ = Math.ceil(sw / T), rows = Math.ceil(sh / T), tiles = []
+  for (let ty = 0; ty < sh; ty += T) for (let tx = 0; tx < sw; tx += T) {
+    let n = 0, paper = 0, x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1
+    const lumBins = new Uint16Array(16), colours = new Map()
+    for (let y = ty; y < Math.min(ty + T, sh); y++) for (let x = tx; x < Math.min(tx + T, sw); x++) {
+      const i = (y * sw + x) * 4, r = data[i], g = data[i + 1], b = data[i + 2]
+      const l = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+      n++
+      if (isPaper(r, g, b)) paper++
+      else { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y) }
+      lumBins[Math.min(15, l * 16 | 0)]++
+      const k = (r >> 4) << 8 | (g >> 4) << 4 | b >> 4; colours.set(k, (colours.get(k) ?? 0) + 1)
+    }
+    const sig = arr => [...arr].filter(c => c >= n * 0.03).length
+    const tones = sig(lumBins), cols = sig(colours.values())
+    const inky = paper / n < 0.35
+    tiles.push({ paperFrac: paper / n, inky, mixed: paper / n < 0.6 && tones >= 3, photo: inky && (tones >= 5 || cols >= 10), ink: [x0, y0, x1, y1] })
+  }
+  // fill holes: an inky tile between photo tiles (left+right or up+down) is photo too (smooth sky, shadows)
+  const at = (c, r) => c >= 0 && r >= 0 && c < cols_ && r < rows ? tiles[r * cols_ + c] : null
+  for (let pass = 0; pass < 3; pass++) for (let r = 0; r < rows; r++) for (let c = 0; c < cols_; c++) {
+    const t = at(c, r); if (t.photo || !t.mixed) continue
+    const p = (dc, dr) => at(c + dc, r + dr)?.photo
+    // between two photo tiles, or (growing) next to one and itself textured
+    if ((p(-1, 0) && p(1, 0)) || (p(0, -1) && p(0, 1)) || (t.inky && (p(-1, 0) || p(1, 0) || p(0, -1) || p(0, 1)))) t.photo = 'filled'
+  }
+  // photos are rectangles: restore the bounding box of each connected group of photo tiles,
+  // trimmed to non-paper pixels so edge tiles don't bring back white paper
+  const seen = new Set(), boxes = []
+  for (let i = 0; i < tiles.length; i++) {
+    if (!tiles[i].photo || seen.has(i)) continue
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -1, -1], n = 0, c0 = cols_, c1 = -1, r0 = rows, r1 = -1
+    const stack = [i]; seen.add(i)
+    while (stack.length) {
+      const j = stack.pop(), t = tiles[j], c = j % cols_, r = j / cols_ | 0; n++
+      c0 = Math.min(c0, c); c1 = Math.max(c1, c); r0 = Math.min(r0, r); r1 = Math.max(r1, r)
+      if (t.ink[2] >= 0) { x0 = Math.min(x0, t.ink[0]); y0 = Math.min(y0, t.ink[1]); x1 = Math.max(x1, t.ink[2]); y1 = Math.max(y1, t.ink[3]) }
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const k = (r + dr) * cols_ + c + dc
+        if (c + dc >= 0 && c + dc < cols_ && r + dr >= 0 && r + dr < rows && tiles[k].photo && !seen.has(k)) { seen.add(k); stack.push(k) }
+      }
+    }
+    // edge tiles are part photo, part paper: grow row by row (column by column) while the line is mostly
+    // non-paper, up to one tile, so a caption under the photo stays out
+    const px = (x, y) => { const i = (y * sw + x) * 4; return isPaper(data[i], data[i + 1], data[i + 2]) ? 0 : 1 }
+    const rowInk = (y, a, b) => { let k = 0; for (let x = a; x <= b; x++) k += px(x, y); return k / (b - a + 1) }
+    const colInk = (x, a, b) => { let k = 0; for (let y = a; y <= b; y++) k += px(x, y); return k / (b - a + 1) }
+    if (x1 >= 0) {
+      for (let k = 0; k < T && y0 > 0 && rowInk(y0 - 1, x0, x1) > 0.5; k++) y0--
+      for (let k = 0; k < T && y1 < sh - 1 && rowInk(y1 + 1, x0, x1) > 0.5; k++) y1++
+      for (let k = 0; k < T && x0 > 0 && colInk(x0 - 1, y0, y1) > 0.5; k++) x0--
+      for (let k = 0; k < T && x1 < sw - 1 && colInk(x1 + 1, y0, y1) > 0.5; k++) x1++
+    }
+    if (n >= 2 && x1 >= 0) boxes.push([x0 * DS, y0 * DS, (x1 - x0 + 1) * DS, (y1 - y0 + 1) * DS]) // lone tiles are noise
+  }
+  const flagged = tiles.filter(t => t.photo).length, filled = tiles.filter(t => t.photo === 'filled').length
+  return { boxes, note: `${boxes.length} photo region(s) from ${flagged} of ${tiles.length} tiles (${filled} by filling/growing); paper rgb(${paperRGB})` }
+}
+function outline(ctx, boxes, colour) {
+  ctx.save(); ctx.strokeStyle = colour; ctx.lineWidth = 3; ctx.setLineDash([8, 6])
+  for (const [x, y, w, h] of boxes) ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3)
+  ctx.restore()
+}
+async function renderPDF(opt, theme) {
+  const p = await loadPDF(S.page)
+  const t0 = performance.now()
+  let c, note = ''
+  if (opt === 'today' || opt === 'invert') { c = copyCanvas(p.orig); if (opt === 'invert') c.style.filter = 'invert(1) hue-rotate(180deg)' }
+  else {
+    c = recolour(p.orig, theme)
+    if (opt.startsWith('smart')) {
+      const r = opt === 'smart-ops' ? opBoxes(p) : pixelBoxes(p.orig)
+      const ctx = c.getContext('2d')
+      for (const b of r.boxes) restore(ctx, p.orig, b, S.dim)
+      note = r.note
+      if (S.outlines) { outline(ctx, r.boxes, '#0f0'); if (r.skipped) outline(ctx, r.skipped, '#f0f') }
+    }
+  }
+  stats[opt] = { ms: +(performance.now() - t0).toFixed(1), renderMs: +p.renderMs.toFixed(1), note }
+  c.onclick = () => openLoupe(c)
+  return c
+}
+
+// ---------- EPUB ----------
+let blobs
+async function epubBlobs() {
+  if (blobs) return blobs
+  blobs = {}
+  for (const f of ['photo.jpg', 'lineart.png', 'diagram-on-white.jpg', 'gaiji.png', 'chart.png'])
+    blobs[f] = URL.createObjectURL(await (await fetch('assets/' + f)).blob())
+  return blobs
+}
+const chapter = b => `
+<h2>IV. The Valley</h2>
+<p>The path came down through the pines to a meadow, and there, marked on the old map with the sign
+<img class="gaiji" src="${b['gaiji.png']}" alt="">, stood the survey stone. Beyond it the valley opened out.</p>
+<figure><img src="${b['photo.jpg']}" alt=""><figcaption>Plate 2. The valley at dusk (photo, JPEG).</figcaption></figure>
+<p>The surveyors had fixed the stone with a simple construction, which the notebook records as follows.</p>
+<figure><img src="${b['lineart.png']}" alt=""><figcaption>Fig. 5. Transparent PNG, black ink.</figcaption></figure>
+<figure><svg viewBox="0 0 400 170" width="100%">
+  <rect x="10" y="40" width="110" height="60" fill="none" stroke="#000" stroke-width="2"/>
+  <rect x="280" y="40" width="110" height="60" fill="none" stroke="#000" stroke-width="2"/>
+  <path d="M120 70 H270" stroke="#c62828" stroke-width="3"/><path d="M270 62 L282 70 L270 78 Z" fill="#c62828"/>
+  <text x="65" y="76" text-anchor="middle" font-size="16">Stone</text>
+  <text x="335" y="76" text-anchor="middle" font-size="16">Peak</text>
+  <text x="200" y="130" text-anchor="middle" font-size="13" fill="#1565c0">bearing 042°</text>
+</svg><figcaption>Fig. 6. Inline SVG, hard-coded black, one red and one blue element.</figcaption></figure>
+<figure><img src="${b['diagram-on-white.jpg']}" alt=""><figcaption>Fig. 7. Line art on white (JPEG).</figcaption></figure>
+<figure><img src="${b['chart.png']}" alt=""><figcaption>Fig. 8. Colour chart, few saturated colours (PNG).</figcaption></figure>
+<p>They camped by the stone that night and took the bearings again at sunrise.</p>`
+
+const filterSVG = theme => {
+  const fg = rgb(theme.fg), bg = rgb(theme.bg)
+  const lin = (c, i) => `<feFunc${c} type="linear" slope="${(fg[i] - bg[i]) / 255}" intercept="${bg[i] / 255}"/>`
+  return `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="fx-recolour" color-interpolation-filters="sRGB">
+    <feComponentTransfer><feFuncR type="table" tableValues="1 0"/><feFuncG type="table" tableValues="1 0"/><feFuncB type="table" tableValues="1 0"/></feComponentTransfer>
+    <feColorMatrix type="hueRotate" values="180"/>
+    <feComponentTransfer>${['R', 'G', 'B'].map(lin).join('')}</feComponentTransfer></filter></svg>`
+}
+function epubCSS(opt, theme) {
+  const base = `html { font: 15px/1.5 Georgia, serif; } body { margin: 24px 28px; }
+    figure { margin: 1em 0; text-align: center; } img { max-width: 100%; } figcaption { font-size: 12px; font-style: italic; }
+    img.gaiji { height: 1em; vertical-align: -0.1em; }`
+  if (opt === 'invert') {
+    const fg = invertHex(theme.fg)
+    return base + `html { color-scheme: only light; color: ${fg}; background: ${invertHex(theme.bg)}; }`
+  }
+  // reader.js getCSS, dark branch, without the media query wrapper
+  const today = `html { color-scheme: dark; color: ${theme.fg}; }
+    html, body { color: ${theme.fg} !important; background: none !important; }
+    body * { color: inherit !important; border-color: currentColor !important; background-color: ${theme.bg} !important; }
+    a:any-link { color: ${theme.link} !important; }`
+  if (opt === 'today') return base + today
+  const fixes = `img, svg { background-color: transparent !important; }`
+  if (opt === 'recolour') return base + today + fixes + `img, svg:not([aria-hidden]) { filter: url(#fx-recolour); }`
+  return base + today + fixes + `.fx-lineart { filter: url(#fx-recolour); } .fx-photo { filter: brightness(${S.dim / 100}); }
+    svg:not([aria-hidden]) { filter: url(#fx-recolour); }`
+}
+// 32×32 check, after Chromium / Dark Reader (see 16's findings)
+function classify(img) {
+  if (img.classList.contains('gaiji') || img.getBoundingClientRect().height <= 1.5 * parseFloat(getComputedStyle(img).fontSize))
+    return { cls: 'lineart', why: 'gaiji or ≤ 1.5em tall' }
+  const c = document.createElement('canvas'); c.width = c.height = 32
+  const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0, 32, 32)
+  let data
+  try { data = ctx.getImageData(0, 0, 32, 32).data } catch (e) { return { cls: 'photo', why: 'canvas tainted: ' + e.name } }
+  let transparent = 0, opaque = 0, lumSum = 0, light = 0, sat = 0; const buckets = new Set()
+  for (let i = 0; i < data.length; i += 4) {
+    const [r, g, b, a] = [data[i], data[i + 1], data[i + 2], data[i + 3]]
+    if (a < 13) { transparent++; continue }
+    opaque++
+    const l = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; lumSum += l; if (l > 0.8) light++
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx > 0 && (mx - mn) / mx > 0.5 && l <= 0.8) sat++
+    buckets.add((r >> 4) << 8 | (g >> 4) << 4 | b >> 4)
+  }
+  const f = { transparent: +(transparent / 1024).toFixed(2), meanLum: +(lumSum / opaque).toFixed(2), light: +(light / opaque).toFixed(2),
+    buckets: buckets.size, satOfInk: +(sat / Math.max(1, opaque - light)).toFixed(2) }
+  if (f.transparent >= 0.1) return f.meanLum < 0.5 ? { cls: 'lineart', why: 'transparent, dark ink', f } : { cls: 'keep', why: 'transparent, light ink', f }
+  if (f.buckets <= 40 && f.light >= 0.5)
+    return f.satOfInk > 0.5 ? { cls: 'chart', why: 'few saturated colours on light', f } : { cls: 'lineart', why: 'few colours, mostly light', f }
+  return { cls: 'photo', why: 'many colours', f }
+}
+async function renderEPUB(opt, theme) {
+  const b = await epubBlobs()
+  const t0 = performance.now()
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${epubCSS(opt, theme)}</style></head>
+    <body>${opt === 'recolour' || opt === 'smart' ? filterSVG(theme) : ''}${chapter(b)}</body></html>`
+  const frame = document.createElement('iframe')
+  frame.src = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+  if (opt === 'invert') frame.style.filter = 'invert(1) hue-rotate(180deg)'
+  const loaded = new Promise(r => frame.onload = r)
+  frame.dataset.opt = opt
+  stats[opt] = { note: '' }
+  frame.after_ = async () => {
+    await loaded
+    const doc = frame.contentDocument
+    await Promise.all([...doc.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r })))
+    if (opt === 'smart') {
+      const decisions = []
+      for (const img of doc.images) {
+        await img.decode().catch(() => {})
+        let d = classify(img), retried = 0
+        // WebKit sometimes draws an iframe's image as fully transparent on the first try; retry after a frame
+        while (d.f?.transparent === 1 && retried < 5) { await new Promise(r => requestAnimationFrame(r)); d = classify(img); retried++ }
+        if (retried) d.retried = retried
+        if (d.cls === 'chart') d = { ...d, cls: S.charts === 'recolour' ? 'lineart' : 'photo' }
+        if (d.cls !== 'keep') img.classList.add('fx-' + d.cls)
+        decisions.push({ file:Object.keys(b).find(k => b[k] === img.src), ...d })
+      }
+      stats[opt].images = decisions.map(({ file, cls, why, f, retried }) => ({ file, cls, why, retried, f }))
+    }
+    frame.style.height = doc.documentElement.scrollHeight + 'px'
+    stats[opt].ms = +(performance.now() - t0).toFixed(1)
+  }
+  return frame
+}
+
+// ---------- UI ----------
+function seg(key, entries, onPick) {
+  return `<span><label class="k">${key}</label><span class="seg">${entries.map(([v, l]) =>
+    `<button data-k="${key}" data-v="${v}" class="${String(S[key]) === String(v) ? 'on' : ''}">${l}</button>`).join('')}</span></span>`
+}
+function header() {
+  document.querySelector('#bar').innerHTML = `<span class="tag">PROTOTYPE</span>
+    ${seg('page', Object.entries(PAGES))}
+    ${seg('theme', Object.entries(THEMES).map(([k, t]) => [k, t.label]))}
+    ${seg('dim', [[100, '100%'], [85, '85%'], [80, '80%']])}
+    ${seg('view', [['compare', 'Compare all'], ['single', 'One at a time']])}
+    ${kind() === 'pdf' ? seg('outlines', [[false, 'Off'], [true, 'Show detected']]) : seg('charts', [['keep', 'Charts: keep'], ['recolour', 'Charts: recolour']])}`
+}
+const mockHTML = () => `
+  <div class="mock"><h4>Option A · Aa popover row</h4>
+    <div class="row grey"><span>Auto · Light · Dark</span></div>
+    <div class="row grey"><span>A− &nbsp; 18 pt &nbsp; A+</span><span>One · Two</span></div>
+    <div class="row grey"><span>● ● ● ● ● ● ● ● ●</span></div>
+    <div class="row"><span>Images</span><span class="seg"><button>Original</button><button class="on">Smart</button><button>Invert</button></span></div>
+  </div>
+  <div class="mock"><h4>Option B · View menu only</h4>
+    <div class="menu"><div class="grey">Theme ▸</div><div class="hl">Images in Dark Mode ▸</div>
+    <div style="padding-left:24px">Original<br>✓ Smart<br>Invert</div><div class="grey">Single Page ⌥⌘1</div></div>
+  </div>
+  <div class="mock"><h4>Option C · no setting</h4><div class="grey">Smart always; the old Invert toggle goes.</div></div>`
+function side() {
+  const state = { ...S, kind: kind(), stats }
+  document.querySelector('#side').innerHTML = `<pre>${JSON.stringify(state, null, 1)}</pre>${mockHTML()}`
+}
+let renderToken = 0
+async function render() {
+  const token = ++renderToken
+  syncURL(); header()
+  const keys = optKeys()
+  if (!keys.includes(S.opt)) S.opt = keys[0]
+  for (const k in stats) delete stats[k]
+  const theme = THEMES[S.theme]
+  const stage = document.querySelector('#stage')
+  stage.className = S.view === 'single' ? 'single' : ''
+  stage.replaceChildren()
+  const show = S.view === 'single' ? [S.opt] : keys
+  const afters = []
+  for (const opt of show) {
+    const [title, sub] = OPTIONS[kind()][opt]
+    const tile = document.createElement('div'); tile.className = 'tile'
+    tile.innerHTML = `<h3>${title}</h3><div class="sub">${sub}</div><div class="page" style="background:${theme.bg}"></div><div class="stats"></div>`
+    stage.append(tile)
+    const el = kind() === 'pdf' ? await renderPDF(opt, theme) : await renderEPUB(opt, theme)
+    if (token !== renderToken) return
+    tile.querySelector('.page').append(el)
+    if (el.after_) afters.push(el.after_())
+  }
+  await Promise.all(afters)
+  for (const tile of stage.children) {
+    const opt = show[[...stage.children].indexOf(tile)], s = stats[opt]
+    tile.querySelector('.stats').textContent = s.ms != null ? `${s.ms} ms${s.renderMs ? ` (+ ${s.renderMs} ms first render)` : ''}${s.note ? '\n' + s.note : ''}` : ''
+  }
+  const sw = document.querySelector('#switcher')
+  sw.hidden = S.view !== 'single'
+  sw.innerHTML = `<button data-step="-1">←</button><span>${keys.indexOf(S.opt) + 1}/${keys.length} · ${OPTIONS[kind()][S.opt][0]}</span><button data-step="1">→</button>`
+  side()
+  window.webkit?.messageHandlers?.done?.postMessage(1)
+}
+function step(d) { const keys = optKeys(); S.opt = keys[(keys.indexOf(S.opt) + d + keys.length) % keys.length]; render() }
+function openLoupe(c) {
+  const l = document.querySelector('#loupe'), copy = copyCanvas(c)
+  copy.style.filter = c.style.filter
+  l.innerHTML = '<div class="hint">Actual pixels · click to close · look for the halo round restored photos</div>'
+  l.append(copy); l.hidden = false
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-k]')
+  if (b) { const k = b.dataset.k, v = b.dataset.v; S[k] = k === 'dim' ? +v : k === 'outlines' ? v === 'true' : v; render(); return }
+  const s = e.target.closest('[data-step]'); if (s) return step(+s.dataset.step)
+  if (e.target.closest('#loupe')) document.querySelector('#loupe').hidden = true
+})
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, textarea, [contenteditable]')) return
+  if (e.key === 'Escape') document.querySelector('#loupe').hidden = true
+  if (S.view !== 'single') return
+  if (e.key === 'ArrowLeft') step(-1); if (e.key === 'ArrowRight') step(1)
+})
+render()
+</script>
+</body>
+</html>
