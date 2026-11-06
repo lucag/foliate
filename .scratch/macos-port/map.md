@@ -18,6 +18,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Decisions so far
 
+- [Research: macOS speech synthesis and the TTS path's SSML marks](issues/12-macos-speech-ssml.md): `AVSpeechSynthesizer` speaks foliate-js's SSML and reports its `<mark>`s, so the Renderer's TTS contract is kept. Three gaps: a bare `<emphasis>` is dropped, rate and pitch must go in `<prosody>`, and mark order needs guarding. Web Speech in WKWebView is ruled out.
 - [Research: Using the `po/` translations from the Swift Shell](issues/14-translations-from-swift.md): keep `po/` as the only source. A converter we write turns it into a generated String Catalog at build time, with plurals mapped through CLDR, and Swift looks strings up through `Bundle`. libintl is ruled out. Strings new to macOS go into `po/` too.
 - [Prototype: Design the reader window](issues/09-design-reader-window.md): an immersive window with no toolbar. A hover top overlay has a pill with Contents and Aa popovers (search and bookmark greyed for later), and the bottom overlay is a slider only. Yellow highlight and Copy, the nine Linux themes, Single/Two Page in the View menu.
 - [Grilling: Spec the reader-only first milestone](issues/08-spec-reader-only-milestone.md): a tracer bullet first (scheme and CSP, file-input loading with an additive fallback, pdf.js worker, PDF speed targets), then the minimal reader. Data in Application Support or `$XDG_DATA_HOME`. Bundle ID `io.github.lucag.Foliate`. Done includes a round trip with Linux.
@@ -31,7 +32,6 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 ## Not yet specified
 
 - What replaces GSettings for preferences on macOS.
-- How TTS is built on macOS, once the speech research (`issues/12-macos-speech-ssml.md`) shows what Apple's synthesizer can do with SSML marks.
 - OPDS catalog and dictionary/lookup support in the Swift Shell.
 - macOS conventions beyond the reader window (whose menus and shortcuts are decided): window tabs, multiple windows, settings.
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
