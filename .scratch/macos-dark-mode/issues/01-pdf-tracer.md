@@ -1,7 +1,7 @@
 # PDF tracer
 
 Status: ready-for-human
-Blocked by: reader 07, reader 10
+Blocked by: macos-reader-milestone 07, macos-reader-milestone 10
 Spec: ../spec.md
 
 ## What to build

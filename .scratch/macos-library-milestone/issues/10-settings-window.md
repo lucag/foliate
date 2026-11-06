@@ -1,7 +1,7 @@
 # Settings window
 
 Status: ready-for-agent
-Blocked by: reader 07
+Blocked by: macos-reader-milestone 07
 Spec: ../spec.md
 
 ## What to build

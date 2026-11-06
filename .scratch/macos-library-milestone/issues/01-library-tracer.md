@@ -1,7 +1,7 @@
 # Library tracer: the store, the window and All Books
 
 Status: ready-for-agent
-Blocked by: reader 04, 05, 10
+Blocked by: macos-reader-milestone 04, macos-reader-milestone 05, macos-reader-milestone 10
 Spec: ../spec.md
 
 ## What to build

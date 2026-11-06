@@ -1,0 +1,20 @@
+# Checks the local issue tracker under .scratch/ (docs/agents/issue-tracker.md).
+name: Scratch tracker
+
+on:
+  push:
+    paths: [ ".scratch/**", "scripts/scratch-check.js", ".github/workflows/scratch.yml" ]
+  pull_request:
+    paths: [ ".scratch/**", "scripts/scratch-check.js", ".github/workflows/scratch.yml" ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/scratch-check.js

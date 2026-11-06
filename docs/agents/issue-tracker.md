@@ -23,8 +23,18 @@ Read the file at the referenced path. The user will normally pass the path or th
 Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 
 - **Map**: `.scratch/<effort>/map.md` (the Notes / Decisions-so-far / Fog body).
-- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `claimed`/`resolved`.
-- **Blocking**: a `Blocked by: NN, NN` line near the top. A ticket is unblocked when every file it lists is `resolved`.
-- **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
+- **Child ticket**: `.scratch/<effort>/issues/NN-<slug>.md`, numbered from `01`, with the question in the body. A `Type:` line records the ticket type (`research`/`prototype`/`grilling`/`task`); a `Status:` line records `open`/`claimed`/`resolved`, or `wontfix` once ruled out of scope.
+- **Blocking**: see Blocking below. A ticket is unblocked when every ticket it lists is `resolved` or `wontfix`.
+- **Frontier**: `node scripts/scratch-check.js frontier .scratch/<effort>`; first by number wins.
 - **Claim**: set `Status: claimed` and save before any work.
-- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then add a context pointer (gist + link) at the **top** of the map's Decisions-so-far in `map.md` (newest first). A `wontfix` ticket gets its line under Out of scope instead.
+- **Slicing tickets** (a ticket whose answer creates or changes a build effort): before resolving, run `grep -rln '<effort name>' .scratch/<map-effort>/issues` and account for every work item an earlier answer assigns to that effort: each is a slice or is ruled out in the Answer.
+
+## Blocking
+
+A `Blocked by:` line near the top of any ticket (wayfinder or build) lists comma-separated blockers, or `(none)`:
+- `NN`: ticket `NN` in the same effort;
+- `<effort-dir> NN`: ticket `NN` in another effort, for example `macos-reader-milestone 07`;
+- an optional trailing `(note)` on an item, for example `02 (if it runs)`.
+
+A build ticket is done when its `Status:` is `resolved`; a ticket that won't run (a conditional slice that wasn't needed) is `wontfix`. Run `node scripts/scratch-check.js` after editing `.scratch/`: it checks statuses, blocker targets and the map's Decisions-so-far links, and CI runs it.
