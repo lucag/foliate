@@ -33,3 +33,7 @@ How does the macOS app find, add and remember books after the reader-only milest
 - **Window:** a separate **Library window**, shown at launch when no book is being restored, and from Window › Library ⌘L. Book windows stay one per book, and opening a book that's already open brings its window forward. The look is left to `17-design-library-window.md`.
 - **Milestone:** the library is the second milestone, with its own build effort once the prototype is done.
 - **Change to the reader-only milestone:** slice 05 (User data) now writes `uri-store.json` and the bookmark side file on every open. This reverses the call recorded in `10-slice-reader-milestone.md`.
+
+## Comments
+
+"Dropping files on the Dock icon imports" is clarified by `20-slice-library-milestone.md`: one file dropped on the Dock (or picked in Open…) opens the book, several are imported, and a drop on the Library window always imports.

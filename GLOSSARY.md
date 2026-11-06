@@ -23,3 +23,7 @@ _Avoid_: global font size, zoom
 **Book text size**:
 A text size the reader chose for one particular book, overriding the Default text size for that book only. Resetting it returns the book to the Default text size.
 _Avoid_: zoom, per-book zoom
+
+**Library**:
+Every book that has a per-book data file in the data folder, whether or not the book's file can currently be found. The same on every platform, so a book read on one machine is in the Library on another that shares the data folder.
+_Avoid_: collection, bookshelf
