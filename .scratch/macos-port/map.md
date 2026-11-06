@@ -18,6 +18,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Decisions so far
 
+- [Grilling: Preferences on macOS](issues/18-preferences-on-macos.md): `UserDefaults` with key names mirroring GSettings, kept on the machine and never synced. Window, library, sidebar, cursor and animation keys are dropped. A remembered voice per language. A global Default text size plus a per-book Book text size. Linux's stylesheet and theme files are read from the config folder. The Settings window (Text, Layout, Appearance) is a library-milestone slice.
 - [Prototype: How dark-mode pages look](issues/19-design-dark-mode-pages.md): Smart is the default. PDFs use operator-list boxes, trimmed so no halo is left, plus pixel detection where there is no box (scans). EPUBs use the per-image check. A setting, Images in Dark Mode: Original / Smart / Invert, sits in the Aa popover and the View menu, and Invert replaces the old toggle. Photo dimming (100/85/80%) and Recolour Charts are the reader's choice. Opt-in in shared code, so Linux is unchanged.
 - [Prototype: Design the Library window](issues/17-design-library-window.md): a sidebar window with no toolbar. The sidebar holds Search Library, Home (Continue Reading, Recently Added, All Books), the Library sections with counts, and a greyed Catalogs place for OPDS. Grid only, with sort beside each section title. Not Found and Remove use sheets. Books are added only through multi-select Open… or drops. Variant E.
 - [Research: What dark mode recolours and what it leaves alone](issues/16-dark-mode-images-vs-figures.md): recolour ink (text, vectors, stencils, scans), keep photos dimmed, and keep hue with a `color` blend pass. Photos come back from the private operator list or pixel detection (corrects `04`). For reflowable books, drop the opaque image background, dim photos, and recolour detected line art with an SVG filter.
@@ -39,7 +40,7 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 ## Not yet specified
 
 - OPDS catalog and dictionary/lookup support in the Swift Shell.
-- macOS conventions beyond the reader window (whose menus and shortcuts are decided): window tabs, multiple windows, settings.
+- macOS conventions beyond the reader window (whose menus and shortcuts are decided): window tabs, multiple windows.
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
 - Packaging: DMG layout, possibly a Homebrew cask; CI for macOS builds.
 
@@ -52,4 +53,5 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 - Electron as the Shell technology (standing preference).
 - [Task: Try a from-source build of the GTK app on Intel macOS](issues/05-from-source-build.md): no working WebKitGTK 6.0 build exists on macOS, so the user dropped the experiment. The porting decision rests on research.
 - Possible PDF breakage on Linux with pre-2026 WebKitGTK (`Map.prototype.getOrInsertComputed`): a pre-existing Linux bug, not porting work. File it upstream with foliate-js once confirmed. See [Grilling: How pdf.js copes with older Safari on macOS 14](issues/07-pdfjs-safari-compat.md).
+- Per-book text size on Linux: there, A−/A+ zoom the WebView without saving it, and `default-size` is global. macOS remembers a size per book ([Grilling: Preferences on macOS](issues/18-preferences-on-macos.md)). This is a Linux Shell change for later, which also decides whether both platforms move the size into the per-book JSON.
 - pdf.js WASM decoders (JPEG 2000, ICC colour, JBIG2) missing from foliate-js: a Renderer feature gap on both platforms. **Next effort**: the user wants this tackled soon, as its own map.

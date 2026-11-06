@@ -19,3 +19,7 @@ Everything goes through `reader.setAppearance`. The settings are kept for the ne
 
 - [ ] XCTest: theme table matches `src/themes.js`; size stepping stops at the ends.
 - [ ] Manual checklist: each control in an EPUB; PDFs keep their page colours (recolouring isn't in this milestone).
+
+## Comments
+
+- From [Grilling: Preferences on macOS](../../macos-port/issues/18-preferences-on-macos.md): preferences stay in `UserDefaults`, now decided rather than a stopgap, with keys named after the GSettings paths (`viewer.view.theme`). A−/A+ and ⌘+/⌘− set the **Book text size**, remembered per book in a `UserDefaults` dictionary keyed by book identifier. A book without one opens at the **Default text size** (`viewer.font.default-size`, default 16), and ⌘0 clears it. Font defaults are `ui-serif`, `ui-sans-serif` and `ui-monospace`. Add to Done: XCTest that a book's size survives a relaunch and that ⌘0 falls back to the default.

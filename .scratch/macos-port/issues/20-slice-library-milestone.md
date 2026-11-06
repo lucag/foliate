@@ -1,7 +1,7 @@
 # Grilling: Slice the library milestone into build tickets
 
 Type: grilling
-Status: open
+Status: claimed
 Map: ../map.md
 
 ## Question
@@ -11,3 +11,7 @@ The library is the second milestone (`13-library-and-file-access.md`). Break it 
 - the order and parallelism of the slices: reading every per-book JSON and cover into the grid, Home's sections, sidebar sections and counts, sort and search, resolving locations (bookmark, then `uri-store`, then Not Found with Locate…), Remove, adding books through multi-select Open… and drops on the window or the Dock icon, the import toast with Undo, and the launch behaviour (Library at launch when no book is restored, Window › Library ⌘L, bringing an open book's window forward);
 - how covers are read and cached from the shared data folder, and how the window stays current when another window or Linux changes the folder;
 - the definition of done, including a round trip with Linux where books added on either machine appear on both.
+
+## Comments
+
+- From [Grilling: Preferences on macOS](18-preferences-on-macos.md): the Settings window (tabs Text, Layout, Appearance; changes apply live) is a slice of this milestone. Its contents and the config-folder rule for `user-stylesheet.css` and `themes/*.json` are in that ticket's Answer.
