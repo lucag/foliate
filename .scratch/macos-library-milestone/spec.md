@@ -6,13 +6,14 @@ Decided in the wayfinder map `.scratch/macos-port/map.md`, mainly:
 - `.scratch/macos-port/issues/13-library-and-file-access.md`: books stay in place, `uri-store.json` plus the bookmark side file, Not Found and Locate…, adding and removing;
 - `.scratch/macos-port/issues/17-design-library-window.md`: the window, sidebar, Home, sections, sort, search, sheets, menus and icons (prototype `macos/prototype-library-window.html?variant=E` on branch `prototype/library-window`);
 - `.scratch/macos-port/issues/20-slice-library-milestone.md`: this slicing, and the calls on covers, Date Added, live updates, importing, Undo and launch;
-- `.scratch/macos-reader-milestone/spec.md`: the reader milestone this builds on.
+- `.scratch/macos-reader-milestone/spec.md`: the reader milestone this builds on;
+- `.scratch/macos-port/issues/18-preferences-on-macos.md` and `21-slice-dark-mode-pages.md`: the Settings window (slice 10).
 
 ## Standing rules
 
 All the reader milestone's standing rules apply (Linux-inert shared changes, XcodeGen project, bundle, the `xcodegen -s macos/project.yml && xcodebuild build test` gate, XCTest for logic that isn't UI plus a manual checklist per slice, no XCUITest, each slice wires its own menu items). In addition:
 
-- **Prerequisites:** reader slices 04 (Bridge), 05 (User data) and 10 (Document types and opening). Slices 06–09 and 11 of the reader milestone aren't needed.
+- **Prerequisites:** reader slices 04 (Bridge), 05 (User data) and 10 (Document types and opening). Slice 10 (Settings window) also needs reader 07 (Appearance). Reader slices 06, 08, 09 and 11 aren't needed.
 - **Shared format untouched:** the library reads Linux's per-book JSON, `library/uri-store.json` and the cover cache as they are. Anything macOS-only lives in side files under `library/` that Linux ignores: `bookmarks-macos.json` (from reader 05) and `added-macos.json` (id → date added, this milestone).
 - **Library store:** one in-process store, shared by the Library window and reader windows, is the only reader and writer of library state. JSON files and covers load off the main thread.
 - **Dates:** Last Read is the per-book JSON's modified time, as on Linux. Date Added comes from `added-macos.json`, written on import and on first open. A book first seen from Linux gets the date the Mac first saw it, or failing that the JSON file's creation time.
@@ -33,8 +34,9 @@ All the reader milestone's standing rules apply (Linux-inert shared changes, Xco
 | 07 | Missing covers | 04, 06 | ready-for-agent |
 | 08 | Live updates | 01 | ready-for-agent |
 | 09 | Acceptance | all others | ready-for-human |
+| 10 | Settings window | reader 07 | ready-for-agent |
 
-After 01, slices 02, 03, 05 and 08 can run in parallel.
+After 01, slices 02, 03, 05 and 08 can run in parallel. 10 needs only reader 07 and can run at any point; 09 waits on it.
 
 ## Done criteria and their owners
 
@@ -45,4 +47,6 @@ After 01, slices 02, 03, 05 and 08 can run in parallel.
 5. **Linux round trip:** books added on either machine appear on both, and their locations resolve when the home folder layout matches. Removing a book on one machine leaves the other consistent, and Linux ignores the macOS side files: 09.
 6. **Launch:** book windows are restored, otherwise the Library window shows, and Window › Library ⌘L and a Dock click with no windows both bring it up (01). With 1,000 books the window appears in under 1 s (01).
 
-09 re-runs all six on the user's Intel Mac.
+7. **Settings:** the Settings window's controls apply live to open reader windows: 10.
+
+09 re-runs all seven on the user's Intel Mac.
