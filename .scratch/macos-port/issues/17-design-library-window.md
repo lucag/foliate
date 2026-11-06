@@ -39,6 +39,16 @@ What does the Library window (`13-library-and-file-access.md`) look like and how
   - Edit: Remove from Library… ⌘⌫ and Find… ⌘F.
   - View: Sort By ▸ and Show/Hide Sidebar ⌃⌘S.
   - Window: Library ⌘L.
+- **Icons:** the prototype's emoji are placeholders. The app uses single-colour SF Symbols, tinted with the accent colour as macOS sidebars are:
+  - Home: `house`.
+  - All Books: `books.vertical`.
+  - Reading: `book`.
+  - Unread: `book.closed`.
+  - Finished: `checkmark.circle`.
+  - Not Found: `exclamationmark.triangle`.
+  - Add Catalog…: `plus.circle`.
+
+  Sheets show the app icon, as standard alerts do. The cover badges stay small text labels, except Finished, which is a `checkmark`.
 - **Rejected:** a toolbar (A–D); no sidebar with a scope bar of filters (B); a table or list view (C, and the grid/list switch in every variant); D's Home as a separate layout, which instead becomes the Home section; search in a hover pill (F) or on a Search page of its own (G); File › Import Books….
 
 Prototype: branch `prototype/library-window`, commit `ec77e75`, file `macos/prototype-library-window.html` (`?variant=E`). Home in the prototype shows only Continue Reading and Recently Added; the All Books part below them was decided afterwards.
