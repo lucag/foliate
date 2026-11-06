@@ -46,3 +46,7 @@ The destination needs work slices ready to build. Break the reader-only mileston
 - **Calls made while writing the slices (open to revision):**
   - 05 leaves `library/uri-store.json` alone, and Open Recent uses AppKit's recents, until `13-library-and-file-access.md` decides the library.
   - 07 keeps appearance settings in `UserDefaults` behind one small type, until preferences are decided.
+
+## Comments
+
+The first call above (05 leaves `library/uri-store.json` alone) is reversed by `13-library-and-file-access.md`: 05 now writes `uri-store.json` and the bookmark side file on every open.
