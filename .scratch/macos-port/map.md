@@ -38,6 +38,8 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
 - Packaging: DMG layout, possibly a Homebrew cask; CI for macOS builds.
 
+- How dark-mode pages should look: likely a prototype comparing recolouring options on the same PDF and EPUB, once `issues/16-dark-mode-images-vs-figures.md` reports.
+
 ## Out of scope
 
 - Mac App Store distribution (sandboxing would reshape file access and the library).
