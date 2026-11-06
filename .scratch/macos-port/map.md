@@ -29,15 +29,12 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Not yet specified
 
-- Library and file access on macOS: how books are found, imported and remembered across launches.
-- Native TTS replacement (e.g. AVSpeechSynthesizer) for the speech-dispatcher path. Likely the hardest native piece, because macOS speech handles SSML marks differently from speech-dispatcher.
 - What replaces GSettings for preferences on macOS.
+- How TTS is built on macOS, once the speech research (`issues/12-macos-speech-ssml.md`) shows what Apple's synthesizer can do with SSML marks.
 - OPDS catalog and dictionary/lookup support in the Swift Shell.
 - macOS conventions beyond the reader window (whose menus and shortcuts are decided): window tabs, multiple windows, settings.
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
-- Translations: reusing `po/` gettext catalogs from Swift (and the Reader page's `uiText`).
 - Packaging: DMG layout, possibly a Homebrew cask; CI for macOS builds.
-- How Renderer changes (e.g. PDF recolouring) reach foliate-js: an upstream PR to johnfactotum/foliate-js vs carrying a fork in the submodule.
 
 ## Out of scope
 
