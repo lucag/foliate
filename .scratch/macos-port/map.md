@@ -35,7 +35,6 @@ A decided, step-by-step plan for shipping an unsigned, directly downloaded `Foli
 
 ## Not yet specified
 
-- What replaces GSettings for preferences on macOS.
 - OPDS catalog and dictionary/lookup support in the Swift Shell.
 - macOS conventions beyond the reader window (whose menus and shortcuts are decided): window tabs, multiple windows, settings.
 - Where annotations are listed and managed, now that the chosen reader window has no sidebar.
