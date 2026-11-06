@@ -75,6 +75,7 @@ const OPTIONS = {
     invert: ['Invert Colors', 'Today’s “Invert Colors in Dark Mode”: CSS invert(1) hue-rotate(180deg). Photos become negatives.'],
     recolour: ['Recolour all', 'Blend-mode remap to the theme, hue kept (04 + 16). Photos become tinted negatives.'],
     'smart-ops': ['Smart · operator list', 'Recolour, then put raster images back from pdf.js’s private render operator list. Images > 50% of the page stay recoloured.'],
+    smart: ['Smart · combined', 'Operator-list boxes trimmed at full resolution to drop the halo, plus pixel detection where there is no box (scans, missing private list).'],
     'smart-pixels': ['Smart · pixel detection', 'Recolour, then put back tiles that look like photos (many tones, little paper). No pdf.js internals.'],
   },
   epub: {
@@ -172,7 +173,38 @@ function opBoxes({ orig, bboxes, fnArray }) {
   return { boxes, skipped, note: `${fnArray.length} ops; ${boxes.length} raster box(es) restored, ${skipped.length} skipped as > 50% of page` }
 }
 // photo tiles: 4× downsample, 16-px tiles (64 device px); photo = little paper and many tones/colours
-const DS = 4, T = 16, PAPER_TOL = 22
+// pdf.js rounds boxes outward to 1/256 of the canvas: shave edge lines that are mostly paper, at full resolution
+// shave edge lines that are mostly paper, at full resolution, at most `cap` px a side.
+// Operator boxes: pdf.js rounds them outward by ≤ 1/256 of the canvas, so cap there and test paper colour.
+// Pixel regions: snapped to the 4× grid, so cap at one cell, test paper lightness (catches anti-aliased
+// scan edges), then inset 2 px.
+function trimBox(orig, [x, y, w, h], paperRGB, { cap, byLightness = false, inset = 0 }) {
+  const { data } = orig.getContext('2d', { willReadFrequently: true }).getImageData(x, y, w, h)
+  const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b, paperLum = lum(...paperRGB)
+  const paper = (px, py) => {
+    const i = (py * w + px) * 4
+    return byLightness ? lum(data[i], data[i + 1], data[i + 2]) >= TRIM_LUM * paperLum
+      : Math.abs(data[i] - paperRGB[0]) <= PAPER_TOL && Math.abs(data[i + 1] - paperRGB[1]) <= PAPER_TOL && Math.abs(data[i + 2] - paperRGB[2]) <= PAPER_TOL
+  }
+  const row = (py, a, b) => { let k = 0; for (let px = a; px < b; px++) k += paper(px, py); return k / (b - a) }
+  const col = (px, a, b) => { let k = 0; for (let py = a; py < b; py++) k += paper(px, py); return k / (b - a) }
+  let x0 = 0, y0 = 0, x1 = w, y1 = h
+  while (y0 < cap.y && y0 < y1 - 1 && row(y0, x0, x1) > 0.5) y0++
+  while (h - y1 < cap.y && y1 - 1 > y0 && row(y1 - 1, x0, x1) > 0.5) y1--
+  while (x0 < cap.x && x0 < x1 - 1 && col(x0, y0, y1) > 0.5) x0++
+  while (w - x1 < cap.x && x1 - 1 > x0 && col(x1 - 1, y0, y1) > 0.5) x1--
+  return [x + x0 + inset, y + y0 + inset, x1 - x0 - 2 * inset, y1 - y0 - 2 * inset]
+}
+function combinedBoxes(p) {
+  const px = pixelBoxes(p.orig), ops = opBoxes(p)
+  const quantum = { x: Math.ceil(p.orig.width / 256) + 1, y: Math.ceil(p.orig.height / 256) + 1 }
+  const trimmed = ops.boxes.map(b => trimBox(p.orig, b, px.paperRGB, { cap: quantum }))
+  const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+  const extra = px.boxes.filter(b => !trimmed.some(t => overlaps(t, b))).map(b => trimBox(p.orig, b, px.paperRGB, { cap: { x: DS + 1, y: DS + 1 }, byLightness: true, inset: 2 }))
+  const shaved = ops.boxes.map((b, i) => `${b[2] - trimmed[i][2]}×${b[3] - trimmed[i][3]} px`).join(', ')
+  return { boxes: [...trimmed, ...extra], note: `${trimmed.length} operator box(es), trimmed by ${shaved || '—'}; ${extra.length} pixel region(s) with no box` }
+}
+const DS = 4, T = 16, PAPER_TOL = 22, TRIM_LUM = 0.7
 function pixelBoxes(orig) {
   const sw = Math.ceil(orig.width / DS), sh = Math.ceil(orig.height / DS)
   const s = document.createElement('canvas'); s.width = sw; s.height = sh
@@ -239,7 +271,7 @@ function pixelBoxes(orig) {
     if (n >= 2 && x1 >= 0) boxes.push([x0 * DS, y0 * DS, (x1 - x0 + 1) * DS, (y1 - y0 + 1) * DS]) // lone tiles are noise
   }
   const flagged = tiles.filter(t => t.photo).length, filled = tiles.filter(t => t.photo === 'filled').length
-  return { boxes, note: `${boxes.length} photo region(s) from ${flagged} of ${tiles.length} tiles (${filled} by filling/growing); paper rgb(${paperRGB})` }
+  return { boxes, paperRGB, note: `${boxes.length} photo region(s) from ${flagged} of ${tiles.length} tiles (${filled} by filling/growing); paper rgb(${paperRGB})` }
 }
 function outline(ctx, boxes, colour) {
   ctx.save(); ctx.strokeStyle = colour; ctx.lineWidth = 3; ctx.setLineDash([8, 6])
@@ -254,7 +286,7 @@ async function renderPDF(opt, theme) {
   else {
     c = recolour(p.orig, theme)
     if (opt.startsWith('smart')) {
-      const r = opt === 'smart-ops' ? opBoxes(p) : pixelBoxes(p.orig)
+      const r = opt === 'smart-ops' ? opBoxes(p) : opt === 'smart' ? combinedBoxes(p) : pixelBoxes(p.orig)
       const ctx = c.getContext('2d')
       for (const b of r.boxes) restore(ctx, p.orig, b, S.dim)
       note = r.note
