@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway. Answers "Design the Library window" (.scratch/macos-port/issues/17-design-library-window.md).
+  Four variants of the macOS Library window, switchable via ?variant=A|B|C|D:
+    A  Sidebar + grid   (source list: smart filters, Catalogs placeholder; Linux/Books.app-like)
+    B  Toolbar only     (no sidebar; filters in a scope bar; one big grid)
+    C  Table first      (Finder/Music-style columns, sortable headers; grid as the alternative)
+    D  Continue Reading (hero shelf of books in progress above the whole library)
+  Every variant: grid/list switch, search, sort, Not Found + Locate…, empty library, Remove sheet,
+  import toast, drop-target highlight, context menu, menu bar additions.
+  Open with: open macos/prototype-library-window.html
+  Shift+←/→ cycles variants. The black dashed panels are prototype chrome, not design.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Library window prototype</title>
+<style>
+:root {
+  --sys: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --bg: #fff; --chrome: #f3f3f3; --side: #e9e9ee; --border: #d6d6d6; --fg: #1d1d1f; --dim: #86868b; --accent: #0a84ff; --hover: rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1e1e1e; --chrome: #2a2a2a; --side: #252528; --border: #3a3a3a; --fg: #eee; --dim: #98989d; --hover: rgba(255,255,255,.06); }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px var(--sys); background: #8a9bb0; color: var(--fg); height: 100vh; overflow: hidden; }
+
+/* fake menu bar */
+#menubar { height: 24px; background: rgba(240,240,240,.85); backdrop-filter: blur(20px); display: flex; align-items: center; gap: 2px; padding: 0 10px; color: #000; position: relative; z-index: 50; }
+#menubar > .menu { padding: 2px 9px; border-radius: 4px; cursor: default; position: relative; }
+#menubar > .menu:first-child { font-weight: 700; }
+#menubar > .menu.open { background: rgba(0,0,0,.12); }
+.dropdown { display: none; position: absolute; top: 22px; left: 0; min-width: 260px; background: rgba(246,246,246,.97); border: 1px solid #c8c8c8; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px; font-weight: 400; }
+.menu.open .dropdown { display: block; }
+.dropdown div { display: flex; justify-content: space-between; padding: 3px 10px; border-radius: 4px; }
+.dropdown div:hover { background: var(--accent); color: #fff; }
+.dropdown div.sep { height: 1px; background: #d5d5d5; margin: 4px 6px; padding: 0; }
+.dropdown div.off { color: #aaa; }
+.dropdown div.new::after { content: "new"; font-size: 9px; background: #ffcc00; color: #000; border-radius: 3px; padding: 0 3px; margin-left: 6px; align-self: center; }
+.dropdown kbd { font: inherit; opacity: .6; margin-left: auto; padding-left: 24px; }
+
+/* window */
+#window { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); width: min(1060px, 95vw); height: calc(100vh - 130px); background: var(--bg); border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.4); overflow: hidden; display: flex; border: 1px solid rgba(0,0,0,.3); }
+.traffic { display: flex; gap: 8px; padding: 0 14px; flex: none; }
+.traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+.side { width: 210px; background: var(--side); border-right: 1px solid var(--border); flex: none; display: flex; flex-direction: column; }
+.side .traffic { height: 52px; align-items: center; }
+.side h6 { margin: 12px 14px 4px; font-size: 11px; color: var(--dim); font-weight: 600; }
+.side a { display: flex; gap: 8px; align-items: center; margin: 0 8px; padding: 4px 8px; border-radius: 6px; color: inherit; text-decoration: none; cursor: default; }
+.side a .n { margin-left: auto; color: var(--dim); font-size: 11px; }
+.side a.on { background: rgba(127,127,127,.22); }
+.side a.off { color: var(--dim); }
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.toolbar { height: 52px; background: var(--chrome); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; padding: 0 12px 0 0; flex: none; }
+.toolbar .title { font-weight: 700; font-size: 15px; padding-left: 14px; }
+.toolbar .title small { display: block; font-weight: 400; color: var(--dim); font-size: 11px; }
+.toolbar .spacer { flex: 1; }
+.tb { height: 26px; min-width: 30px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: 14px var(--sys); padding: 0 7px; cursor: default; }
+.tb:hover, .tb.on { background: rgba(127,127,127,.18); }
+.seg { display: flex; background: rgba(127,127,127,.14); border-radius: 7px; padding: 2px; }
+.seg button { border: 0; background: transparent; color: inherit; padding: 2px 9px; font: 13px var(--sys); border-radius: 5px; cursor: default; }
+.seg button.on { background: var(--bg); box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.search { height: 26px; width: 190px; border-radius: 7px; border: 1px solid var(--border); background: var(--bg); color: inherit; padding: 0 8px 0 24px; font: 13px var(--sys); background-image: radial-gradient(circle at 12px 12px, transparent 4px, var(--dim) 4.5px, transparent 5.5px); }
+select.tbsel { height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: inherit; font: 13px var(--sys); }
+.scope { display: flex; gap: 6px; align-items: center; padding: 6px 14px; border-bottom: 1px solid var(--border); background: var(--chrome); font-size: 12px; flex: none; }
+.scope button { border: 0; background: transparent; color: inherit; border-radius: 999px; padding: 2px 10px; font: inherit; cursor: default; }
+.scope button.on { background: var(--accent); color: #fff; }
+.scope .n { opacity: .6; }
+.content { flex: 1; overflow: auto; padding: 18px 20px 80px; position: relative; }
+h3.section { margin: 4px 0 12px; font-size: 15px; }
+h3.section small { font-weight: 400; color: var(--dim); font-size: 12px; margin-left: 6px; }
+
+/* covers & grid */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 22px 18px; }
+.item { cursor: default; position: relative; }
+.item.sel .cover { outline: 3px solid var(--accent); outline-offset: 2px; }
+.cover { aspect-ratio: 2/3; border-radius: 3px 6px 6px 3px; box-shadow: 0 2px 6px rgba(0,0,0,.3), inset 4px 0 0 rgba(0,0,0,.12); display: flex; flex-direction: column; justify-content: space-between; padding: 10px 8px; color: #fff; font: 600 12px/1.2 Georgia, serif; overflow: hidden; position: relative; }
+.cover small { font: 10px var(--sys); opacity: .85; }
+.cover.pdf { border-radius: 2px; background: #fafafa !important; color: #333; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.item.missing .cover { filter: grayscale(1) opacity(.45); }
+.badge { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,.72); color: #fff; font: 600 9px var(--sys); padding: 2px 5px; border-radius: 4px; }
+.badge.new { background: var(--accent); }
+.badge.nf { background: #d70015; }
+.meta { margin-top: 6px; }
+.meta .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta .a { color: var(--dim); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { height: 3px; background: rgba(127,127,127,.25); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.pct { font-size: 11px; color: var(--dim); }
+.nf-text { font-size: 11px; color: #d70015; }
+
+/* list */
+table.list { width: 100%; border-collapse: collapse; }
+table.list th { text-align: left; font-weight: 500; color: var(--dim); font-size: 11px; padding: 4px 8px; border-bottom: 1px solid var(--border); position: sticky; top: -18px; background: var(--bg); cursor: default; white-space: nowrap; }
+table.list th.sorted { color: var(--fg); }
+table.list th.sorted::after { content: " ▾"; }
+table.list td { padding: 5px 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+table.list tr:nth-child(even) td { background: var(--hover); }
+table.list tr.sel td { background: var(--accent) !important; color: #fff; }
+table.list tr.missing td { color: var(--dim); }
+table.list .mini { width: 22px; height: 32px; border-radius: 2px; display: inline-block; vertical-align: middle; }
+table.list .bar { width: 80px; display: inline-block; vertical-align: middle; margin: 0 6px 0 0; }
+.rows .row { display: flex; gap: 12px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--border); cursor: default; }
+.rows .row.sel { background: var(--accent); color: #fff; border-radius: 6px; }
+.rows .row .cover { width: 40px; padding: 0; font-size: 0; flex: none; }
+.rows .row .meta { flex: 1; margin: 0; min-width: 0; }
+.rows .row .right { width: 140px; text-align: right; }
+.rows .row.missing { opacity: .55; }
+
+/* D hero */
+.shelf { display: flex; gap: 22px; padding: 4px 0 26px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
+.shelf .item { width: 300px; display: flex; gap: 14px; flex: none; background: var(--hover); border-radius: 12px; padding: 12px; }
+.shelf .cover { width: 92px; flex: none; }
+.shelf .meta { margin: 0; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.shelf .meta .t { white-space: normal; font-size: 14px; }
+.shelf .meta .where { font-size: 11px; color: var(--dim); margin-top: auto; }
+.shelf .resume { align-self: flex-start; margin-top: 8px; border: 0; background: var(--accent); color: #fff; border-radius: 999px; padding: 3px 12px; font: 12px var(--sys); }
+
+/* empty, drop, toast, sheet, context menu */
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; color: var(--dim); padding: 40px; }
+.empty .big { font-size: 54px; opacity: .5; }
+.empty h2 { margin: 0; color: var(--fg); font-weight: 600; font-size: 20px; }
+.empty button, .sheet button { font: 13px var(--sys); padding: 4px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--chrome); color: var(--fg); cursor: default; }
+button.primary { background: var(--accent) !important; color: #fff !important; border-color: var(--accent) !important; }
+button.danger { background: #d70015 !important; color: #fff !important; border-color: #d70015 !important; }
+.drop { position: absolute; inset: 8px; border: 3px dashed var(--accent); border-radius: 12px; background: color-mix(in srgb, var(--accent) 10%, transparent); display: flex; align-items: center; justify-content: center; font-size: 17px; font-weight: 600; color: var(--accent); z-index: 25; pointer-events: none; }
+.toast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); background: rgba(30,30,30,.9); color: #fff; padding: 8px 14px; border-radius: 10px; display: flex; gap: 12px; align-items: center; z-index: 30; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.toast button { background: transparent; border: 0; color: #64b5ff; font: 600 13px var(--sys); }
+.sheet-wrap { position: absolute; inset: 0; background: rgba(0,0,0,.18); z-index: 40; display: flex; justify-content: center; align-items: flex-start; }
+.sheet { margin-top: 70px; width: 340px; background: var(--chrome); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.4); padding: 20px; text-align: center; }
+.sheet .ico { font-size: 40px; }
+.sheet h4 { margin: 8px 0 6px; font-size: 13px; }
+.sheet p { margin: 0 0 14px; font-size: 11px; color: var(--dim); }
+.sheet .btns { display: flex; flex-direction: column; gap: 6px; }
+.sheet .btns button { width: 100%; }
+.ctx { position: fixed; background: rgba(246,246,246,.98); color: #000; border: 1px solid #c8c8c8; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px; z-index: 60; min-width: 200px; }
+.ctx div { padding: 3px 10px; border-radius: 4px; cursor: default; }
+.ctx div:hover { background: var(--accent); color: #fff; }
+.ctx div.sep { height: 1px; background: #d5d5d5; margin: 4px 6px; padding: 0; }
+.ctx div.off { color: #aaa; }
+
+.hover-pill { position: absolute; top: 8px; right: 12px; display: flex; align-items: center; gap: 4px; background: color-mix(in srgb, var(--chrome) 85%, transparent); border: 1px solid var(--border); border-radius: 999px; padding: 3px 6px; backdrop-filter: blur(12px); box-shadow: 0 2px 8px rgba(0,0,0,.15); opacity: 0; transition: opacity .2s; z-index: 15; }
+.main:hover .hover-pill, .hover-pill:focus-within { opacity: 1; }
+.pill-sep { width: 1px; height: 16px; background: var(--border); }
+/* prototype chrome */
+#switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #111; color: #fff; border-radius: 999px; padding: 6px 10px; display: flex; gap: 10px; align-items: center; font: 12px ui-monospace, monospace; box-shadow: 0 4px 16px rgba(0,0,0,.5); z-index: 100; outline: 2px dashed #ff0; }
+#switcher button { background: #333; color: #fff; border: 0; border-radius: 999px; padding: 2px 9px; font: inherit; cursor: pointer; }
+#switcher select { font: inherit; }
+#readout { position: fixed; right: 10px; bottom: 60px; background: #111; color: #9f9; font: 11px ui-monospace, monospace; padding: 8px 10px; border-radius: 8px; white-space: pre; z-index: 100; outline: 2px dashed #ff0; }
+</style>
+</head>
+<body>
+<div id="menubar"></div>
+<div id="window"></div>
+<div id="readout"></div>
+<div id="switcher"></div>
+
+<script>
+const VARIANTS = { A: 'Sidebar + grid', B: 'Toolbar only', C: 'Table first', D: 'Continue Reading', E: 'A+Home, search in sidebar', F: 'A+Home, search in overlay', G: 'A+Home, Search page' }
+const params = new URLSearchParams(location.search)
+const isNew = () => 'EFG'.includes(variant)
+let variant = VARIANTS[params.get('variant')] ? params.get('variant') : 'A'
+
+const day = 864e5, now = Date.now()
+const SEED = [
+  ['The Left Hand of Darkness', 'Ursula K. Le Guin', .42, 0, 30, 'epub', '#3b5b7a', 'Chapter 7 · The Question of Sex'],
+  ['Middlemarch', 'George Eliot', .17, 1, 60, 'epub', '#7a4b3b', 'Book II · Old and Young'],
+  ['Thinking in Systems', 'Donella H. Meadows', .63, 3, 90, 'pdf', '#fafafa', 'p. 112 of 218'],
+  ['Moby-Dick; or, The Whale', 'Herman Melville', .08, 6, 200, 'epub', '#22445a', 'Chapter 9 · The Sermon'],
+  ['The Rings of Saturn', 'W. G. Sebald', 1, 12, 300, 'epub', '#5a5a52', ''],
+  ['Pride and Prejudice', 'Jane Austen', 1, 40, 400, 'mobi', '#8a5a7a', ''],
+  ['A Pattern Language', 'Christopher Alexander et al.', .31, 20, 120, 'pdf', '#fafafa', 'p. 340 of 1171'],
+  ['Invisible Cities', 'Italo Calvino', null, null, 2, 'epub', '#a0742a', ''],
+  ['The Dispossessed', 'Ursula K. Le Guin', null, null, 2, 'epub', '#2e6b5a', ''],
+  ['Structure and Interpretation of Computer Programs', 'Abelson & Sussman', .12, 70, 500, 'pdf', '#fafafa', 'p. 61 of 657'],
+  ['Le Petit Prince', 'Antoine de Saint-Exupéry', 1, 100, 600, 'fb2', '#3a6ea5', ''],
+  ['Gödel, Escher, Bach', 'Douglas R. Hofstadter', .05, 150, 700, 'epub', '#6b2e2e', 'Introduction'],
+  ['Notes from Underground', 'Fyodor Dostoevsky', .55, 200, 800, 'cbz', '#444', 'Part II · Apropos of the Wet Snow'],
+  ['The Waves', 'Virginia Woolf', .22, 260, 900, 'epub', '#4a6e8a', '', true],
+  ['Kokoro', 'Natsume Sōseki', null, null, 1000, 'epub', '#8a2e2e', '', true],
+]
+const mk = ([title, author, progress, readAgo, addedAgo, fmt, color, where, missing]) => ({
+  id: Math.random().toString(36).slice(2), title, author, progress, fmt, color, where, missing: !!missing,
+  lastRead: readAgo == null ? null : now - readAgo * day, added: now - addedAgo * day,
+})
+let books = SEED.map(mk)
+const IMPORTS = [['Walden', 'Henry David Thoreau', null, null, 0, 'epub', '#4e6b3a', ''],
+  ['Flatland', 'Edwin A. Abbott', null, null, 0, 'pdf', '#fafafa', ''],
+  ['The Odyssey', 'Homer, tr. Emily Wilson', null, null, 0, 'epub', '#9a6a2a', '']]
+
+const S = { view: 'grid', sort: 'lastRead', query: '', filter: 'all', sel: null, contents: 'normal', drop: false, sheet: null, toast: null, ctx: null, sidebar: true }
+
+const fmtDate = t => { if (t == null) return '—'; const d = Math.round((now - t) / day); return d === 0 ? 'Today' : d === 1 ? 'Yesterday' : d < 7 ? `${d} days ago` : new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d > 300 ? 'numeric' : undefined }) }
+const pct = p => p == null ? 'New' : p >= 1 ? 'Finished' : Math.round(p * 100) + '%'
+const status = b => b.missing ? 'missing' : b.progress == null ? 'unread' : b.progress >= 1 ? 'finished' : 'reading'
+const FILTERS = { all: 'All Books', reading: 'Reading', unread: 'Unread', finished: 'Finished', missing: 'Not Found' }
+const SORTS = { lastRead: 'Last Read', title: 'Title', author: 'Author', added: 'Date Added', progress: 'Progress' }
+const authorKey = a => a.split(/[,&]| et al/)[0].trim().split(' ').pop()
+
+function visible() {
+  let list = S.contents === 'empty' ? [] : books.filter(b => S.contents === 'withMissing' || !b.missing)
+  if (!['all', 'home', 'search'].includes(S.filter)) list = list.filter(b => status(b) === S.filter)
+  const q = S.query.toLowerCase()
+  if (q) list = list.filter(b => (b.title + ' ' + b.author).toLowerCase().includes(q))
+  const cmp = {
+    lastRead: (a, b) => (b.lastRead ?? b.added) - (a.lastRead ?? a.added),
+    title: (a, b) => a.title.replace(/^(The|A|Le) /, '').localeCompare(b.title.replace(/^(The|A|Le) /, '')),
+    author: (a, b) => authorKey(a.author).localeCompare(authorKey(b.author)),
+    added: (a, b) => b.added - a.added,
+    progress: (a, b) => (b.progress ?? -1) - (a.progress ?? -1),
+  }[S.sort]
+  return list.sort(cmp)
+}
+const allBooks = () => S.contents === 'empty' ? [] : books.filter(b => S.contents === 'withMissing' || !b.missing)
+const counts = () => { const c = { all: 0, reading: 0, unread: 0, finished: 0, missing: 0 }; for (const b of allBooks()) { c.all++; c[status(b)]++ } return c }
+
+const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`)
+const cover = b => `<div class="cover ${b.fmt === 'pdf' ? 'pdf' : ''}" style="background:${b.color}"><span>${esc(b.title)}</span><small>${esc(b.author)}</small></div>`
+const badge = b => b.missing ? '<span class="badge nf">NOT FOUND</span>' : b.progress == null ? '<span class="badge new">NEW</span>' : b.progress >= 1 ? '<span class="badge">✓</span>' : ''
+const progressLine = b => b.missing ? `<div class="nf-text">Not found — Locate…</div>` :
+  b.progress == null ? '<div class="pct">New</div>' : b.progress >= 1 ? '<div class="pct">Finished</div>' :
+  `<div class="bar"><i style="width:${b.progress * 100}%"></i></div>`
+const itemAttrs = b => `class="item ${b.missing ? 'missing' : ''} ${S.sel === b.id ? 'sel' : ''}" data-id="${b.id}"`
+
+const gridHTML = list => `<div class="grid">${list.map(b => `<div ${itemAttrs(b)}>${cover(b)}${badge(b)}<div class="meta"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div>${progressLine(b)}</div></div>`).join('')}</div>`
+const rowsHTML = list => `<div class="rows">${list.map(b => `<div class="row item ${b.missing ? 'missing' : ''} ${S.sel === b.id ? 'sel' : ''}" data-id="${b.id}">${cover(b)}<div class="meta"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div></div><div class="right">${b.missing ? '<span class="nf-text">Not found</span>' : `${pct(b.progress)}<div class="pct">${fmtDate(b.lastRead)}</div>`}</div></div>`).join('')}</div>`
+const tableHTML = list => {
+  const cols = [['title', 'Title'], ['author', 'Author'], ['progress', 'Progress'], ['lastRead', 'Last Read'], ['added', 'Date Added'], [null, 'Kind']]
+  return `<table class="list"><tr><th></th>${cols.map(([k, l]) => `<th data-sort="${k ?? ''}" class="${S.sort === k ? 'sorted' : ''}">${l}</th>`).join('')}</tr>
+  ${list.map(b => `<tr class="item ${b.missing ? 'missing' : ''} ${S.sel === b.id ? 'sel' : ''}" data-id="${b.id}"><td><span class="mini" style="background:${b.color};${b.fmt === 'pdf' ? 'border:1px solid #ccc' : ''}"></span></td>
+  <td>${b.missing ? '⚠︎ ' : ''}${esc(b.title)}</td><td>${esc(b.author)}</td>
+  <td>${b.missing ? '<span class="nf-text">Not found</span>' : b.progress != null && b.progress < 1 ? `<span class="bar"><i style="width:${b.progress * 100}%"></i></span>${pct(b.progress)}` : pct(b.progress)}</td>
+  <td>${fmtDate(b.lastRead)}</td><td>${fmtDate(b.added)}</td><td>${b.fmt.toUpperCase()}</td></tr>`).join('')}</table>`
+}
+const listHTML = list => variant === 'C' ? tableHTML(list) : rowsHTML(list)
+const booksHTML = list => S.view === 'grid' || isNew() ? gridHTML(list) : listHTML(list)
+
+const viewSeg = () => `<div class="seg"><button data-view="grid" class="${S.view === 'grid' ? 'on' : ''}" title="as Grid ⌘1">▦</button><button data-view="list" class="${S.view === 'list' ? 'on' : ''}" title="as List ⌘2">☰</button></div>`
+const sortSel = () => `<select class="tbsel" id="sort" title="Sort By">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${S.sort === k ? 'selected' : ''}>↕ ${l}</option>`).join('')}</select>`
+const searchBox = () => `<input class="search" id="q" placeholder="Search" value="${esc(S.query)}">`
+const importBtn = () => `<button class="tb" data-act="import" title="Import Books… ⇧⌘O">＋</button>`
+
+function emptyHTML() {
+  if (allBooks().length === 0) return `<div class="empty"><div class="big">📚</div><h2>No Books Yet</h2>
+    <div>${isNew() ? 'Choose Open… (pick several to add them all)' : 'Open a book'}, or drop EPUB, PDF, MOBI, FB2 or CBZ files here.<br>Books stay where they are; Foliate only remembers them.</div>
+    <div style="display:flex;gap:8px;margin-top:6px">${isNew() ? '<button class="primary" data-act="open">Open…</button>' : '<button class="primary" data-act="import">Import Books…</button><button data-act="open">Open…</button>'}</div></div>`
+  if (S.query) return `<div class="empty"><div class="big">🔍</div><h2>No Results</h2><div>No books match “${esc(S.query)}”.</div></div>`
+  return `<div class="empty"><div class="big">📭</div><h2>Nothing Here</h2><div>No books in “${FILTERS[S.filter]}”.</div></div>`
+}
+
+function windowHTML() {
+  const list = visible(), c = counts(), n = allBooks().length
+  const subtitle = n ? `${n} book${n === 1 ? '' : 's'}` : ''
+  const body = list.length ? booksHTML(list) : emptyHTML()
+  if (variant === 'A') return `
+    ${S.sidebar ? `<div class="side"><div class="traffic"><i></i><i></i><i></i></div>
+      <h6>Library</h6>${Object.entries(FILTERS).filter(([k]) => k !== 'missing' || c.missing).map(([k, l]) => `<a data-filter="${k}" class="${S.filter === k ? 'on' : ''}">${{ all: '📚', reading: '📖', unread: '✦', finished: '✓', missing: '⚠︎' }[k]} ${l}<span class="n">${c[k]}</span></a>`).join('')}
+      <h6>Catalogs</h6><a class="off" title="OPDS — a later milestone">＋ Add Catalog…</a>
+      <div style="flex:1"></div><div style="padding:10px 14px;font-size:10px;color:var(--dim)">(Catalogs greyed: OPDS is a later milestone; this is where they would go.)</div></div>` : ''}
+    <div class="main"><div class="toolbar">${S.sidebar ? '' : '<div class="traffic"><i></i><i></i><i></i></div>'}
+      <button class="tb" data-act="sidebar" title="Toggle Sidebar ⌃⌘S">◧</button>
+      <div class="title">${FILTERS[S.filter]}<small>${subtitle}</small></div><div class="spacer"></div>
+      ${importBtn()}${viewSeg()}${sortSel()}${searchBox()}</div>
+      <div class="content">${body}</div>${overlays()}</div>`
+  if (variant === 'B') return `
+    <div class="main"><div class="toolbar"><div class="traffic"><i></i><i></i><i></i></div>
+      <div class="title">Library<small>${subtitle}</small></div><div class="spacer"></div>
+      ${importBtn()}${viewSeg()}${sortSel()}${searchBox()}</div>
+      ${n ? `<div class="scope">${Object.entries(FILTERS).filter(([k]) => k !== 'missing' || c.missing).map(([k, l]) => `<button data-filter="${k}" class="${S.filter === k ? 'on' : ''}">${l} <span class="n">${c[k]}</span></button>`).join('')}</div>` : ''}
+      <div class="content">${body}</div>${overlays()}</div>`
+  if (variant === 'C') return `
+    <div class="main"><div class="toolbar"><div class="traffic"><i></i><i></i><i></i></div>
+      <div class="title">Library<small>${subtitle}</small></div><div class="spacer"></div>
+      ${importBtn()}${viewSeg()}${S.view === 'grid' ? sortSel() : ''}
+      <select class="tbsel" id="filter">${Object.entries(FILTERS).filter(([k]) => k !== 'missing' || c.missing).map(([k, l]) => `<option value="${k}" ${S.filter === k ? 'selected' : ''}>${l} (${c[k]})</option>`).join('')}</select>
+      ${searchBox()}</div>
+      <div class="content" style="${S.view === 'list' ? 'padding:0 0 80px' : ''}">${body}</div>${overlays()}</div>`
+  if (isNew()) return newHTML(list, c, n)
+  // D
+  const reading = allBooks().filter(b => status(b) === 'reading').sort((a, b) => b.lastRead - a.lastRead).slice(0, 4)
+  const showShelf = reading.length && !S.query
+  return `
+    <div class="main"><div class="toolbar"><div class="traffic"><i></i><i></i><i></i></div>
+      <div class="title">Library<small>${subtitle}</small></div><div class="spacer"></div>
+      ${importBtn()}${viewSeg()}${sortSel()}${searchBox()}</div>
+      <div class="content">${showShelf ? `<h3 class="section">Continue Reading</h3><div class="shelf">${reading.map(b => `<div ${itemAttrs(b)}>${cover(b)}<div class="meta"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div>
+        <div class="bar"><i style="width:${b.progress * 100}%"></i></div><div class="pct">${pct(b.progress)} · ${fmtDate(b.lastRead)}</div><button class="resume" data-open="${b.id}">Resume</button>
+        <div class="where">${esc(b.where)}</div></div></div>`).join('')}</div>` : ''}
+        ${n ? `<h3 class="section">${S.query ? 'Results' : 'All Books'}<small>${list.length}</small></h3>` : ''}${body}</div>${overlays()}</div>`
+}
+
+function shelfHTML() {
+  const reading = allBooks().filter(b => status(b) === 'reading').sort((a, b) => b.lastRead - a.lastRead).slice(0, 4)
+  return reading.length ? `<h3 class="section">Continue Reading</h3><div class="shelf">${reading.map(b => `<div ${itemAttrs(b)}>${cover(b)}<div class="meta"><div class="t">${esc(b.title)}</div><div class="a">${esc(b.author)}</div>
+    <div class="bar"><i style="width:${b.progress * 100}%"></i></div><div class="pct">${pct(b.progress)} · ${fmtDate(b.lastRead)}</div><button class="resume" data-open="${b.id}">Resume</button>
+    <div class="where">${esc(b.where)}</div></div></div>`).join('')}</div>` : ''
+}
+function newHTML(list, c, n) {
+  const icons = { home: '⌂', search: '⌕', all: '📚', reading: '📖', unread: '✦', finished: '✓', missing: '⚠︎' }
+  const link = (k, l, count) => `<a data-filter="${k}" class="${S.filter === k ? 'on' : ''}">${icons[k]} ${l}${count != null ? `<span class="n">${count}</span>` : ''}</a>`
+  const searching = !!S.query
+  const sideSearch = variant === 'E' ? `<div style="padding:0 10px 4px"><input class="search" id="q" style="width:100%" placeholder="Search Library" value="${esc(S.query)}"></div>` : ''
+  const top = `<div style="height:8px"></div>${link('home', 'Home')}${variant === 'G' ? link('search', 'Search') : ''}`
+  const side = `<div class="side"><div class="traffic"><i></i><i></i><i></i></div>${sideSearch}${top}
+    <h6>Library</h6>${Object.entries(FILTERS).filter(([k]) => k !== 'missing' || c.missing).map(([k, l]) => link(k, l, c[k])).join('')}
+    <h6>Catalogs</h6><a class="off" title="OPDS — a later milestone">＋ Add Catalog…</a>
+    <div style="flex:1"></div><div style="padding:10px 14px;font-size:10px;color:var(--dim)">(Catalogs greyed: OPDS is a later milestone.)</div></div>`
+  const sortInline = `<select class="tbsel" id="sort" title="Sort By" style="border:0;background:transparent;color:var(--dim)">${Object.entries(SORTS).map(([k, l]) => `<option value="${k}" ${S.sort === k ? 'selected' : ''}>Sorted by ${l}</option>`).join('')}</select>`
+  const header = (title, count, sort = true) => `<div style="display:flex;align-items:baseline;gap:8px;margin:0 0 14px"><h2 style="margin:0;font-size:26px">${title}</h2><span style="color:var(--dim)">${count ?? ''}</span><div style="flex:1"></div>${sort && variant !== 'F' ? sortInline : ''}</div>`
+  let body
+  if (!n) body = emptyHTML()
+  else if (searching && S.filter !== 'search' && variant !== 'G') body = header('Results', `${list.length} for “${esc(S.query)}”`) + (list.length ? gridHTML(list) : emptyHTML())
+  else if (S.filter === 'search') body = `<input class="search" id="q" placeholder="Title or author" value="${esc(S.query)}" style="width:100%;height:36px;font-size:16px;margin-bottom:18px" autofocus>` +
+      (searching ? header('Results', list.length) + (list.length ? gridHTML(list) : emptyHTML()) : `<div style="color:var(--dim)">Type to search titles and authors in your library.</div>`)
+  else if (S.filter === 'home') {
+    const recent = [...allBooks()].sort((a, b) => b.added - a.added).slice(0, 6)
+    body = header('Home', '', false) + shelfHTML() + `<h3 class="section">Recently Added</h3>` + gridHTML(recent)
+  } else body = header(FILTERS[S.filter], list.length) + (list.length ? gridHTML(list) : emptyHTML())
+  const pill = variant === 'F' ? `<div class="hover-pill"><input class="search" id="q" placeholder="Search" value="${esc(S.query)}" style="width:${S.query ? 200 : 150}px;border-radius:999px;height:24px">${S.filter !== 'home' ? `<span class="pill-sep"></span>${sortInline}` : ''}</div>` : ''
+  return `${side}<div class="main"><div class="content" style="padding-top:40px">${body}</div>${pill}${overlays()}</div>`
+}
+function overlays() {
+  let h = ''
+  if (S.drop) h += `<div class="drop">Drop to add 3 books to the Library</div>`
+  if (S.toast) h += `<div class="toast">${esc(S.toast.text)}${S.toast.action ? `<button data-act="${S.toast.act}">${S.toast.action}</button>` : ''}</div>`
+  if (S.sheet) {
+    const b = books.find(x => x.id === S.sheet.id)
+    if (S.sheet.kind === 'remove') h += `<div class="sheet-wrap"><div class="sheet"><div class="ico">📕</div><h4>Remove “${esc(b.title)}” from the Library?</h4>
+      <p>Reading progress, highlights and bookmarks will be permanently deleted. The book file stays where it is${b.missing ? '' : ', in ~/Books'}.</p>
+      <div class="btns"><button class="danger" data-act="doRemove">Remove</button><button data-act="close">Cancel</button></div></div></div>`
+    if (S.sheet.kind === 'missing') h += `<div class="sheet-wrap"><div class="sheet"><div class="ico">⚠︎</div><h4>“${esc(b.title)}” can’t be found</h4>
+      <p>It was last at ~/Books/${esc(b.title.split(' ').slice(0, 2).join('-'))}.epub. It may have been moved, renamed, or be on a disconnected drive. Locate it to keep your progress and highlights.</p>
+      <div class="btns"><button class="primary" data-act="locate">Locate…</button><button data-act="askRemove">Remove from Library…</button><button data-act="close">Cancel</button></div></div></div>`
+    if (S.sheet.kind === 'open') h += `<div class="sheet-wrap" data-act="close"><div class="sheet"><div class="ico">📖</div><h4>(prototype) Would open “${esc(b.title)}”</h4>
+      <p>in its own reader window (or bring it forward if already open). The Library window stays open.</p><div class="btns"><button data-act="close">OK</button></div></div></div>`
+  }
+  return h
+}
+
+function menus() {
+  const v = S.view, a = variant === 'A'
+  return [
+    ['Foliate', [['About Foliate'], '-', ['Settings…', '⌘,', 'off'], '-', ['Hide Foliate', '⌘H'], ['Quit Foliate', '⌘Q']]],
+    ['File', [['Open…', '⌘O'], ...(isNew() ? [] : [['Import Books…', '⇧⌘O', 'new']]), ['Open Recent ▸'], '-', ['Close Window', '⌘W'], '-', ['Show in Finder', '⇧⌘R', 'new'], ['Locate…', '', 'new'], ['Book Info', '⌘I', 'off']]],
+    ['Edit', [['Undo', '⌘Z', 'off'], '-', ['Copy', '⌘C'], ['Select All', '⌘A'], '-', ['Remove from Library…', '⌘⌫', 'new'], '-', ['Find…', '⌘F', 'new']]],
+    ['View', isNew() ? [['Home', '⌘0', 'new'], ['Sort By ▸', '', 'new'], '-', [S.sidebar ? 'Hide Sidebar' : 'Show Sidebar', '⌃⌘S', 'new'], '-', ['Enter Full Screen', '⌃⌘F']] : [[(v === 'grid' ? '✓ ' : '   ') + 'as Grid', '⌘1', 'new'], [(v === 'list' ? '✓ ' : '   ') + 'as List', '⌘2', 'new'], ['Sort By ▸', '', 'new'],
+      ...(a ? ['-', [S.sidebar ? 'Hide Sidebar' : 'Show Sidebar', '⌃⌘S', 'new']] : []), '-', ['Enter Full Screen', '⌃⌘F']]],
+    ['Go', [['(reader only)', '', 'off']]],
+    ['Window', [['Minimize', '⌘M'], ['Zoom'], '-', ['Library', '⌘L', 'new'], '-', ['Bring All to Front']]],
+    ['Help', [['Foliate Help']]],
+  ]
+}
+function renderMenus() {
+  const mb = document.getElementById('menubar')
+  mb.innerHTML = menus().map(([name, items]) => `<div class="menu">${name}<div class="dropdown">${items.map(it => it === '-' ? '<div class="sep"></div>' :
+    `<div class="${it[2] ?? ''}" data-menu="${esc(it[0].trim())}">${it[0]}<kbd>${it[1] ?? ''}</kbd></div>`).join('')}</div></div>`).join('')
+}
+
+function renderSwitcher() {
+  const sw = document.getElementById('switcher')
+  sw.innerHTML = `<button data-sw="-1">←</button><b>${variant} (${VARIANTS[variant]})</b><button data-sw="1">→</button>
+    <span>|</span> contents <select id="contents"><option value="normal">normal</option><option value="withMissing">+ not found (from Linux)</option><option value="empty">empty library</option></select>
+    <button data-act="drop">drag over</button><button data-act="import">${isNew() ? 'Open… 3 files' : 'import 3'}</button>`
+  sw.querySelector('#contents').value = S.contents
+}
+function renderReadout() {
+  const b = books.find(x => x.id === S.sel)
+  document.getElementById('readout').textContent =
+    `variant   ${variant}\nview      ${S.view}\nsort      ${S.sort}\nfilter    ${S.filter}\nquery     ${JSON.stringify(S.query)}\ncontents  ${S.contents}\nshown     ${visible().length} / ${allBooks().length}\nselected  ${b ? b.title.slice(0, 26) : '—'}\nsheet     ${S.sheet?.kind ?? '—'}`
+}
+function render() {
+  const focused = document.activeElement?.id === 'q', caret = focused ? document.activeElement.selectionStart : 0
+  document.getElementById('window').innerHTML = windowHTML()
+  renderMenus(); renderSwitcher(); renderReadout()
+  if (focused) { const q = document.getElementById('q'); q.focus(); q.setSelectionRange(caret, caret) }
+}
+
+let toastTimer
+function toast(text, action, act) { S.toast = { text, action, act }; clearTimeout(toastTimer); toastTimer = setTimeout(() => { S.toast = null; render() }, 4500) }
+function doImport() {
+  S.drop = false; if (S.contents === 'empty') S.contents = 'normal'
+  const added = IMPORTS.map(mk); added.forEach(b => b.added = Date.now()); books.push(...added)
+  S.lastImport = added.map(b => b.id); S.sort = S.sort === 'lastRead' ? 'lastRead' : S.sort
+  toast(`Imported ${added.length} books`, 'Undo', 'undoImport')
+}
+function openBook(id) { const b = books.find(x => x.id === id); S.sel = id; S.sheet = { kind: b.missing ? 'missing' : 'open', id } }
+
+document.addEventListener('click', e => {
+  const t = e.target
+  document.querySelectorAll('.menu.open').forEach(m => { if (!m.contains(t)) m.classList.remove('open') })
+  if (S.ctx && !t.closest('.ctx')) { S.ctx.remove(); S.ctx = null }
+  const menu = t.closest('#menubar > .menu'); if (menu && !t.closest('.dropdown')) { menu.classList.toggle('open'); return }
+  const mi = t.closest('[data-menu]')
+  if (mi) { menu?.classList.remove('open'); t.closest('.menu')?.classList.remove('open'); const m = mi.dataset.menu.replace('✓ ', '')
+    if (m === 'as Grid') S.view = 'grid'; else if (m === 'as List') S.view = 'list'
+    else if (m === 'Import Books…') doImport(); else if (/Sidebar/.test(m)) S.sidebar = !S.sidebar
+    else if (m === 'Find…') { render(); document.getElementById('q')?.focus(); return }
+    else if (m === 'Remove from Library…' && S.sel) S.sheet = { kind: 'remove', id: S.sel }
+    render(); return }
+  const sw = t.closest('[data-sw]'); if (sw) return cycle(+sw.dataset.sw)
+  const v = t.closest('[data-view]'); if (v) { S.view = v.dataset.view; return render() }
+  const f = t.closest('[data-filter]'); if (f) { S.filter = f.dataset.filter; return render() }
+  const th = t.closest('th[data-sort]'); if (th && th.dataset.sort) { S.sort = th.dataset.sort; return render() }
+  const op = t.closest('[data-open]'); if (op) { openBook(op.dataset.open); return render() }
+  const act = t.closest('[data-act]')?.dataset.act
+  if (act) {
+    if (act === 'import') doImport()
+    else if (act === 'open') { if (isNew()) doImport(); else toast('(prototype) Open… file picker') }
+    else if (act === 'drop') { S.drop = true; render(); setTimeout(() => { if (S.drop) { doImport(); render() } }, 1400) ; return }
+    else if (act === 'sidebar') S.sidebar = !S.sidebar
+    else if (act === 'close') S.sheet = null
+    else if (act === 'askRemove') S.sheet = { kind: 'remove', id: S.sheet.id }
+    else if (act === 'doRemove') { const b = books.find(x => x.id === S.sheet.id); books = books.filter(x => x !== b); S.sheet = null; S.sel = null; toast(`Removed “${b.title}”`) }
+    else if (act === 'locate') { const b = books.find(x => x.id === S.sheet.id); b.missing = false; S.sheet = null; toast(`Found “${b.title}” — identifier matches`) }
+    else if (act === 'undoImport') { books = books.filter(b => !S.lastImport?.includes(b.id)); S.toast = null }
+    return render()
+  }
+  const it = t.closest('.item[data-id]')
+  if (it) { S.sel = it.dataset.id; if (books.find(x => x.id === S.sel).missing) openBook(S.sel); return render() }
+  if (t.closest('.content')) { S.sel = null; render() }
+})
+document.addEventListener('dblclick', e => { const it = e.target.closest('.item[data-id]'); if (it) { openBook(it.dataset.id); render() } })
+document.addEventListener('contextmenu', e => {
+  const it = e.target.closest('.item[data-id]'); if (!it) return
+  e.preventDefault(); S.sel = it.dataset.id; render()
+  const b = books.find(x => x.id === S.sel)
+  S.ctx?.remove(); const m = document.createElement('div'); m.className = 'ctx'
+  m.innerHTML = (b.missing ? `<div data-c="locate">Locate…</div>` : `<div data-c="open">Open</div><div data-c="finder">Show in Finder</div><div class="off">Book Info</div>`) +
+    `<div class="sep"></div><div data-c="remove">Remove from Library…</div>`
+  m.style.left = e.clientX + 'px'; m.style.top = e.clientY + 'px'; document.body.append(m); S.ctx = m
+  m.onclick = ev => { const c = ev.target.dataset.c; m.remove(); S.ctx = null
+    if (c === 'open') openBook(b.id); else if (c === 'locate') S.sheet = { kind: 'missing', id: b.id }
+    else if (c === 'remove') S.sheet = { kind: 'remove', id: b.id }; else if (c === 'finder') toast('(prototype) Reveals the file in Finder')
+    render() }
+})
+document.addEventListener('input', e => { if (e.target.id === 'q') { S.query = e.target.value; render() } })
+document.addEventListener('change', e => {
+  if (e.target.id === 'sort') S.sort = e.target.value
+  else if (e.target.id === 'filter') S.filter = e.target.value
+  else if (e.target.id === 'contents') { S.contents = e.target.value; S.filter = 'all' }
+  render()
+})
+function cycle(d) { const ks = Object.keys(VARIANTS); variant = ks[(ks.indexOf(variant) + d + ks.length) % ks.length]; if (isNew() && S.filter === 'all') S.filter = 'home'; if (!isNew() && ['home', 'search'].includes(S.filter)) S.filter = 'all'; params.set('variant', variant); history.replaceState(null, '', '?' + params); render() }
+document.addEventListener('keydown', e => {
+  const typing = e.target.matches('input, textarea, select, [contenteditable]')
+  if (e.shiftKey && !typing && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); return cycle(e.key === 'ArrowLeft' ? -1 : 1) }
+  if (e.metaKey && e.key === '1') { e.preventDefault(); S.view = 'grid'; render() }
+  if (e.metaKey && e.key === '2') { e.preventDefault(); S.view = 'list'; render() }
+  if (e.metaKey && e.key === 'f') { e.preventDefault(); document.getElementById('q')?.focus() }
+  if (e.metaKey && e.key === 'Backspace' && S.sel && !typing) { S.sheet = { kind: 'remove', id: S.sel }; render() }
+  if (e.key === 'Escape') { if (S.sheet) S.sheet = null; else if (typing) { S.query = ''; e.target.blur() } render() }
+  if (e.key === 'Enter' && S.sel && !typing && !S.sheet) { openBook(S.sel); render() }
+})
+if ('EFG'.includes(variant)) S.filter = 'home'
+render()
+</script>
+</body>
+</html>
