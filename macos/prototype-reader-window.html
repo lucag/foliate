@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway. Answers "Design the reader window" (.scratch/macos-port/issues/09-design-reader-window.md).
+  Four variants of the macOS reader-only window, switchable via ?variant=A|B|C|D (D = C with TOC and Aa grouped in a top pill).
+  Open with: open macos/prototype-reader-window.html
+  Shift+←/→ cycles variants (plain ←/→ turn pages, as they will in the real app).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reader window prototype</title>
+<style>
+:root {
+  --sys-font: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  --chrome: #ececec; --chrome-border: #d0d0d0; --chrome-fg: #333; --accent: #0a84ff;
+  --page-fg: #000; --page-bg: #fff; --page-link: #0066cc;
+  --font-size: 18px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --chrome: #2b2b2b; --chrome-border: #1a1a1a; --chrome-fg: #ddd; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 13px var(--sys-font); background: #8a9bb0; color: var(--chrome-fg); height: 100vh; overflow: hidden; }
+
+/* fake macOS menu bar */
+#menubar { height: 24px; background: rgba(240,240,240,.85); backdrop-filter: blur(20px); display: flex; align-items: center; gap: 2px; padding: 0 10px; color: #000; position: relative; z-index: 50; }
+#menubar > .menu { padding: 2px 9px; border-radius: 4px; cursor: default; position: relative; }
+#menubar > .menu:first-child { font-weight: 700; }
+#menubar > .menu.open { background: rgba(0,0,0,.12); }
+.dropdown { display: none; position: absolute; top: 22px; left: 0; min-width: 250px; background: rgba(246,246,246,.97); border: 1px solid #c8c8c8; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.25); padding: 4px; font-weight: 400; }
+.menu.open .dropdown { display: block; }
+.dropdown div { display: flex; justify-content: space-between; padding: 3px 10px; border-radius: 4px; }
+.dropdown div:hover { background: var(--accent); color: #fff; }
+.dropdown div.sep { height: 1px; background: #d5d5d5; margin: 4px 6px; padding: 0; }
+.dropdown div.sep:hover { background: #d5d5d5; }
+.dropdown div.off { color: #aaa; }
+.dropdown kbd { font: inherit; opacity: .6; margin-left: 24px; }
+
+/* window */
+#window { position: absolute; top: 44px; left: 50%; transform: translateX(-50%); width: min(980px, 94vw); height: calc(100vh - 120px); background: var(--page-bg); border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.4); overflow: hidden; display: flex; flex-direction: column; border: 1px solid rgba(0,0,0,.3); }
+.traffic { display: flex; gap: 8px; padding: 0 12px; }
+.traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.traffic i:nth-child(1) { background: #ff5f57; } .traffic i:nth-child(2) { background: #febc2e; } .traffic i:nth-child(3) { background: #28c840; }
+.toolbar { height: 52px; background: var(--chrome); border-bottom: 1px solid var(--chrome-border); display: flex; align-items: center; gap: 6px; padding-right: 10px; flex: none; }
+.toolbar .title { flex: 1; text-align: center; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toolbar .title small { display: block; font-weight: 400; opacity: .6; font-size: 11px; }
+.tb { min-width: 30px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: inherit; font-size: 15px; cursor: default; padding: 0 6px; }
+.tb:hover, .tb.on { background: rgba(127,127,127,.18); }
+.tbgroup { display: flex; }
+
+.body { flex: 1; display: flex; min-height: 0; position: relative; }
+.sidebar { width: 240px; background: color-mix(in srgb, var(--chrome) 85%, transparent); border-right: 1px solid var(--chrome-border); overflow: auto; padding: 8px; flex: none; }
+.sidebar.hidden { display: none; }
+.inspector { width: 260px; background: var(--chrome); border-left: 1px solid var(--chrome-border); padding: 12px; flex: none; overflow: auto; }
+.inspector.hidden { display: none; }
+
+/* page */
+.page { flex: 1; background: var(--page-bg); color: var(--page-fg); overflow: hidden; position: relative; display: flex; flex-direction: column; }
+.page .text { flex: 1; columns: 2; column-gap: 64px; padding: 40px 64px 10px; font: var(--font-size)/1.5 Georgia, serif; overflow: hidden; }
+.page.single .text { columns: 1; max-width: 720px; margin: 0 auto; }
+.page h2 { margin-top: 0; font-weight: 400; }
+.page a { color: var(--page-link); }
+.page .foot { height: 28px; display: flex; justify-content: space-between; padding: 0 64px; font: 11px var(--sys-font); opacity: .55; align-items: center; flex: none; }
+mark { color: inherit; border-radius: 2px; }
+mark.yellow { background: #f6d32d88; } mark.orange { background: #ffa34888; } mark.red { background: #f6616188; }
+mark.magenta { background: #e66dc588; } mark.aqua { background: #5bd8f088; } mark.lime { background: #8ff0a488; }
+
+/* popovers */
+.popover { position: absolute; background: var(--chrome); color: var(--chrome-fg); border: 1px solid var(--chrome-border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.3); padding: 8px; z-index: 20; font: 13px var(--sys-font); }
+.popover.hidden { display: none; }
+.toc a { display: block; padding: 4px 8px; border-radius: 5px; color: inherit; text-decoration: none; }
+.toc a.current { background: var(--accent); color: #fff; }
+.toc a.sub { padding-left: 22px; }
+.row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.row label { width: 74px; opacity: .7; }
+.swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.swatch { border: 2px solid transparent; border-radius: 8px; padding: 8px 4px; text-align: center; font: 12px Georgia, serif; cursor: default; }
+.swatch.on { border-color: var(--accent); }
+.seg { display: flex; border: 1px solid var(--chrome-border); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: inherit; padding: 3px 10px; font: inherit; }
+.seg button.on { background: var(--accent); color: #fff; }
+.dots { display: flex; gap: 6px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(0,0,0,.2); cursor: default; }
+.dot.yellow { background: #f6d32d; } .dot.orange { background: #ffa348; } .dot.red { background: #f66151; }
+.dot.magenta { background: #e66dc5; } .dot.aqua { background: #5bd8f0; } .dot.lime { background: #8ff0a4; }
+.sel-pop .btn { border: 0; background: transparent; color: inherit; font: inherit; padding: 4px 8px; border-radius: 5px; }
+.sel-pop .btn:hover { background: rgba(127,127,127,.2); }
+.sel-pop .vsep { width: 1px; align-self: stretch; background: var(--chrome-border); }
+
+/* variant C HUD */
+.hud { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(30,30,30,.82); color: #eee; border-radius: 14px; padding: 8px 12px; display: flex; gap: 8px; align-items: center; backdrop-filter: blur(12px); opacity: 0; transition: opacity .2s; z-index: 15; }
+.page:hover .hud, .hud.pinned { opacity: 1; }
+.hud input[type=range] { width: 260px; }
+.hud .tb { color: #eee; }
+.titlehover { position: absolute; top: 0; left: 0; right: 0; height: 36px; display: flex; align-items: center; opacity: 0; transition: opacity .2s; background: linear-gradient(var(--page-bg), transparent); z-index: 15; }
+.page:hover .titlehover, .titlehover.pinned { opacity: 1; }
+.pill { display: flex; align-items: center; margin-right: 10px; background: color-mix(in srgb, var(--chrome) 80%, transparent); border: 1px solid var(--chrome-border); border-radius: 999px; padding: 2px 4px; backdrop-filter: blur(12px); box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.pill .tb { border-radius: 999px; color: var(--chrome-fg); }
+.pill-sep { width: 1px; height: 16px; background: var(--chrome-border); }
+
+/* states */
+.state-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--page-bg); color: var(--page-fg); font: 14px var(--sys-font); z-index: 30; text-align: center; padding: 40px; }
+.state-overlay.hidden { display: none; }
+.spinner { width: 28px; height: 28px; border: 3px solid rgba(127,127,127,.3); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-overlay .big { font-size: 40px; }
+.state-overlay button { font: inherit; padding: 4px 14px; border-radius: 6px; border: 1px solid var(--chrome-border); background: var(--chrome); color: var(--chrome-fg); }
+.state-overlay button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* prototype chrome: switcher + state readout, deliberately unlike the design */
+#switcher { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #111; color: #fff; border-radius: 999px; padding: 6px 10px; display: flex; gap: 10px; align-items: center; font: 12px ui-monospace, monospace; box-shadow: 0 4px 16px rgba(0,0,0,.5); z-index: 100; outline: 2px dashed #ff0; }
+#switcher button { background: #333; color: #fff; border: 0; border-radius: 999px; padding: 2px 9px; font: inherit; cursor: pointer; }
+#switcher select { font: inherit; }
+#readout { position: fixed; right: 10px; bottom: 60px; background: #111; color: #9f9; font: 11px ui-monospace, monospace; padding: 8px 10px; border-radius: 8px; white-space: pre; z-index: 100; outline: 2px dashed #ff0; max-width: 300px; }
+</style>
+</head>
+<body>
+
+<div id="menubar"></div>
+<div id="window"></div>
+
+<pre id="readout"></pre>
+<div id="switcher">
+  <button id="prev" title="Shift+←">◀</button>
+  <span id="vlabel"></span>
+  <button id="next" title="Shift+→">▶</button>
+  <span>state:</span>
+  <select id="stateSel">
+    <option value="reading">reading</option>
+    <option value="loading">loading</option>
+    <option value="safari">Safari too old (PDF)</option>
+    <option value="error">book error</option>
+  </select>
+</div>
+
+<script>
+// ---------- fixture data ----------
+const BOOK = { title: 'Pride and Prejudice', author: 'Jane Austen' }
+const TOC = [
+  { label: 'Title Page' },
+  { label: 'Volume I', children: ['Chapter 1', 'Chapter 2', 'Chapter 3'] },
+  { label: 'Volume II', children: ['Chapter 24', 'Chapter 25'] },
+  { label: 'Volume III', children: ['Chapter 47', 'Chapter 48'] },
+]
+const PAGES = [
+  `<h2>Chapter 1</h2><p>It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.</p><p>However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered as the rightful property of some one or other of their daughters.</p><p>“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”</p><p>Mr. Bennet replied that he had not.</p><p>“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”</p><p>Mr. Bennet made no answer.</p><p>“Do not you want to know who has taken it?” cried his wife impatiently.</p><p>“<em>You</em> want to tell me, and I have no objection to hearing it.”</p><p>This was invitation enough.</p>`,
+  `<p>“Why, my dear, you must know, Mrs. Long says that Netherfield is taken by a young man of large fortune from the north of England; that he came down on Monday in a chaise and four to see the place, and was so much delighted with it that he agreed with Mr. Morris immediately; that he is to take possession before Michaelmas, and some of his servants are to be in the house by the end of next week.”</p><p>“What is his name?”</p><p>“Bingley.”</p><p>“Is he married or single?”</p><p>“Oh! single, my dear, to be sure! A single man of large fortune; four or five thousand a year. What a fine thing for our girls!”</p><p>“How so? how can it affect them?”</p><p>“My dear Mr. Bennet,” replied his wife, “how can you be so tiresome! You must know that I am thinking of his marrying one of them.”</p>`,
+]
+// themes and highlight colours as in src/themes.js and src/annotations.js
+const THEMES = {
+  default: { label: 'Default', light: ['#000000', '#ffffff', '#0066cc'], dark: ['#e0e0e0', '#222222', '#77bbee'] },
+  gray: { label: 'Gray', light: ['#222222', '#e0e0e0', '#4488cc'], dark: ['#c6c6c6', '#444444', '#88ccee'] },
+  sepia: { label: 'Sepia', light: ['#5b4636', '#f1e8d0', '#008b8b'], dark: ['#ffd595', '#342e25', '#48d1cc'] },
+  grass: { label: 'Grass', light: ['#232c16', '#d7dbbd', '#177b4d'], dark: ['#d8deba', '#333627', '#a6d608'] },
+  cherry: { label: 'Cherry', light: ['#4e1609', '#f0d1d5', '#de3838'], dark: ['#e5c4c8', '#462f32', '#ff646e'] },
+  sky: { label: 'Sky', light: ['#262d48', '#cedef5', '#2d53e5'], dark: ['#babee1', '#282e47', '#ff646e'] },
+  solarized: { label: 'Solarized', light: ['#586e75', '#fdf6e3', '#268bd2'], dark: ['#93a1a1', '#002b36', '#268bd2'] },
+  gruvbox: { label: 'Gruvbox', light: ['#3c3836', '#fbf1c7', '#076678'], dark: ['#ebdbb2', '#282828', '#83a598'] },
+  nord: { label: 'Nord', light: ['#2e3440', '#eceff4', '#5e81ac'], dark: ['#d8dee9', '#2e3440', '#88c0d0'] },
+}
+const COLORS = ['yellow', 'orange', 'red', 'magenta', 'aqua', 'lime']
+const FONT_STEPS = [14, 16, 18, 20, 22, 26, 30]
+
+// menus: shared across variants; View differs slightly per variant
+const MENUS = v => [
+  ['Foliate', [['About Foliate'], '-', ['Settings…', '⌘,', 'off'], '-', ['Hide Foliate', '⌘H'], ['Quit Foliate', '⌘Q']]],
+  ['File', [['Open…', '⌘O'], ['Open Recent', '▸'], '-', ['Close Window', '⌘W'], '-', ['Book Info', '⌘I', 'off']]],
+  ['Edit', [['Copy', '⌘C'], ['Highlight Selection', '⇧⌘H'], '-', ['Find…', '⌘F', 'off']]],
+  ['View', [
+    ...(v === 'B' ? [['Show Sidebar', '⌃⌘S'], ['Show Appearance Inspector', '⌥⌘I']]
+      : [['Table of Contents', '⌃⌘T'], ['Appearance…', '⌘T']]),
+    '-', ['Bigger', '⌘+'], ['Smaller', '⌘−'], ['Actual Size', '⌘0'], '-',
+    ['Theme', '▸'], '-', ['✓ Single Page', '⌥⌘1'], ['Two Pages', '⌥⌘2'], '-', ['Enter Full Screen', '⌃⌘F']]],
+  ['Go', [['Next Page', '→'], ['Previous Page', '←'], '-', ['Next Chapter', '⌥→'], ['Previous Chapter', '⌥←'], '-', ['Back', '⌘['], ['Forward', '⌘]']]],
+  ['Window', [['Minimize', '⌘M'], ['Zoom'], '-', ['Bring All to Front']]],
+  ['Help', [['Foliate Help']]],
+]
+
+// ---------- in-memory state ----------
+const S = {
+  variant: new URLSearchParams(location.search).get('variant') ?? 'A',
+  view: 'reading', page: 0, theme: 'sepia', mode: 'auto', fontIdx: 2, twoPages: true,
+  open: null, // which popover/panel is open
+  sidebar: true, inspector: false, highlights: [], selection: null,
+}
+const VARIANTS = { A: 'Toolbar + popovers', B: 'Sidebar + inspector', C: 'Immersive HUD', D: 'Immersive + top pill' }
+
+const $ = (s, el = document) => el.querySelector(s)
+const dark = () => S.mode === 'dark' || (S.mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches)
+
+function applyTheme() {
+  const [fg, bg, link] = THEMES[S.theme][dark() ? 'dark' : 'light']
+  const r = document.documentElement.style
+  r.setProperty('--page-fg', fg); r.setProperty('--page-bg', bg); r.setProperty('--page-link', link)
+  r.setProperty('--font-size', FONT_STEPS[S.fontIdx] + 'px')
+}
+
+// ---------- shared pieces ----------
+const tocHTML = () => `<div class="toc">${TOC.map(t =>
+  `<a href="#" class="${t.label === 'Volume I' ? '' : ''}">${t.label}</a>` +
+  (t.children ?? []).map(c => `<a href="#" class="sub ${c === 'Chapter 1' ? 'current' : ''}">${c}</a>`).join('')).join('')}</div>`
+
+const appearanceHTML = () => `
+  <div class="row"><label>Appearance</label><div class="seg">${['auto', 'light', 'dark'].map(m =>
+    `<button data-mode="${m}" class="${S.mode === m ? 'on' : ''}">${m === 'auto' ? 'Auto' : m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
+  <div class="row"><label>Text size</label><div class="seg"><button data-font="-1">A−</button><button disabled>${FONT_STEPS[S.fontIdx]}pt</button><button data-font="1">A+</button></div></div>
+  <div class="row"><label>Layout</label><div class="seg"><button data-two="0" class="${S.twoPages ? '' : 'on'}">One page</button><button data-two="1" class="${S.twoPages ? 'on' : ''}">Two</button></div></div>
+  <div class="swatches" style="margin-top:10px">${Object.entries(THEMES).map(([k, t]) => {
+    const [fg, bg] = t[dark() ? 'dark' : 'light']
+    return `<div class="swatch ${S.theme === k ? 'on' : ''}" data-theme="${k}" style="color:${fg};background:${bg}">Aa<br><small>${t.label}</small></div>`
+  }).join('')}</div>`
+
+const pageHTML = () => `
+  <div class="page ${S.twoPages ? '' : 'single'}" id="page">
+    <div class="text" id="text">${PAGES[S.page % PAGES.length]}</div>
+    <div class="foot"><span>Chapter 1</span><span>Page ${S.page + 1} of 342 · 3%</span></div>
+    ${stateOverlay()}
+  </div>`
+
+function stateOverlay() {
+  if (S.view === 'loading') return `<div class="state-overlay"><div class="spinner"></div><div>Opening “${BOOK.title}”…</div></div>`
+  if (S.view === 'safari') return `<div class="state-overlay"><div class="big">⚠︎</div>
+    <b>This PDF needs a newer Safari</b>
+    <div style="max-width:420px;opacity:.75">Foliate uses Safari’s engine to display PDFs. Update Safari to version 26.2 or later in System Settings › General › Software Update, then reopen the book.</div>
+    <div><button class="primary">Open Software Update</button> <button>Close</button></div></div>`
+  if (S.view === 'error') return `<div class="state-overlay"><div class="big">📕</div>
+    <b>Foliate can’t open “broken.epub”</b>
+    <div style="opacity:.75">The file is damaged or isn’t a supported format (EPUB, MOBI, AZW, FB2, CBZ, PDF).</div>
+    <div><button>Show in Finder</button> <button class="primary">Close</button></div></div>`
+  return ''
+}
+
+// selection popover: shape differs per variant
+const selPopHTML = () => {
+  if (S.variant === 'A') return `<div class="row" style="margin:0"><div class="dots">${COLORS.map(c => `<span class="dot ${c}" data-hl="${c}" title="Highlight ${c}"></span>`).join('')}</div><span class="vsep"></span><button class="btn" data-copy>Copy</button></div>`
+  if (S.variant === 'B') return `<div style="min-width:160px"><button class="btn" data-hl="yellow" style="width:100%;text-align:left">Highlight</button>
+    <div class="dots" style="padding:4px 8px">${COLORS.map(c => `<span class="dot ${c}" data-hl="${c}"></span>`).join('')}</div>
+    <button class="btn" data-copy style="width:100%;text-align:left">Copy</button></div>`
+  return `<div class="row" style="margin:0"><button class="btn" data-hl="yellow">Highlight</button><button class="btn" data-copy>Copy</button></div>`
+}
+
+// ---------- variants ----------
+function renderA() {
+  return `
+  <div class="toolbar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="tbgroup"><button class="tb" data-act="prev" title="Previous page">‹</button><button class="tb" data-act="next" title="Next page">›</button></div>
+    <button class="tb ${S.open === 'toc' ? 'on' : ''}" data-pop="toc" title="Table of Contents (⌃⌘T)">☰</button>
+    <div class="title">${BOOK.title}<small>${BOOK.author}</small></div>
+    <button class="tb ${S.open === 'appearance' ? 'on' : ''}" data-pop="appearance" title="Appearance (⌘T)">Aa</button>
+  </div>
+  <div class="body">${pageHTML()}
+    <div class="popover toc-pop ${S.open === 'toc' ? '' : 'hidden'}" style="top:6px;left:110px;width:240px;max-height:70%;overflow:auto">${tocHTML()}</div>
+    <div class="popover ${S.open === 'appearance' ? '' : 'hidden'}" style="top:6px;right:8px;width:300px">${appearanceHTML()}</div>
+    <div class="popover sel-pop hidden" id="selpop">${selPopHTML()}</div>
+  </div>`
+}
+function renderB() {
+  return `
+  <div class="toolbar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <button class="tb ${S.sidebar ? 'on' : ''}" data-act="sidebar" title="Show Sidebar (⌃⌘S)">◧</button>
+    <div class="title">${BOOK.title}<small>Chapter 1 · ${BOOK.author}</small></div>
+    <div class="tbgroup"><button class="tb" data-act="prev">‹</button><button class="tb" data-act="next">›</button></div>
+    <button class="tb ${S.inspector ? 'on' : ''}" data-act="inspector" title="Appearance Inspector (⌥⌘I)">ⓘ</button>
+  </div>
+  <div class="body">
+    <div class="sidebar ${S.sidebar ? '' : 'hidden'}"><div style="font-size:11px;font-weight:600;opacity:.5;margin:4px 8px">CONTENTS</div>${tocHTML()}
+      <div style="font-size:11px;font-weight:600;opacity:.5;margin:14px 8px 4px">HIGHLIGHTS</div>
+      <div style="padding:0 8px;opacity:.7">${S.highlights.length ? S.highlights.map(h => `<div class="row"><span class="dot ${h.color}" style="width:10px;height:10px"></span>${h.text.slice(0, 26)}…</div>`).join('') : 'None yet'}</div></div>
+    ${pageHTML()}
+    <div class="inspector ${S.inspector ? '' : 'hidden'}"><b>Appearance</b>${appearanceHTML()}</div>
+    <div class="popover sel-pop hidden" id="selpop">${selPopHTML()}</div>
+  </div>`
+}
+function renderC() {
+  return `
+  <div class="body">${pageHTML().replace('<div class="text"', `
+      <div class="titlehover"><div class="traffic"><i></i><i></i><i></i></div><div style="flex:1;text-align:center;color:var(--page-fg);opacity:.6">${BOOK.title}</div><div style="width:70px"></div></div>
+      <div class="hud ${S.open ? 'pinned' : ''}">
+        <button class="tb" data-act="prev">‹</button>
+        <button class="tb" data-pop="toc" title="Contents">☰</button>
+        <input type="range" min="1" max="342" value="${S.page + 1}">
+        <span style="font:11px var(--sys-font);opacity:.7">${S.page + 1}/342</span>
+        <button class="tb" data-pop="appearance" title="Appearance">Aa</button>
+        <button class="tb" data-act="next">›</button>
+      </div>
+      <div class="text"`)}
+    <div class="popover ${S.open === 'toc' ? '' : 'hidden'}" style="bottom:70px;left:calc(50% - 200px);width:240px;max-height:60%;overflow:auto">${tocHTML()}</div>
+    <div class="popover ${S.open === 'appearance' ? '' : 'hidden'}" style="bottom:70px;left:calc(50% + 20px);width:300px">${appearanceHTML()}</div>
+    <div class="popover sel-pop hidden" id="selpop">${selPopHTML()}</div>
+  </div>`
+}
+
+function renderD() {
+  // C's immersive window; TOC and Aa grouped in a pill in the top overlay (like Apple Books)
+  const pinned = S.open ? 'pinned' : ''
+  return `
+  <div class="body">${pageHTML().replace('<div class="text"', `
+      <div class="titlehover ${pinned}" style="height:44px">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <div style="flex:1;text-align:center;color:var(--page-fg);opacity:.6">${BOOK.title}</div>
+        <div class="pill">
+          <button class="tb ${S.open === 'toc' ? 'on' : ''}" data-pop="toc" title="Table of Contents (⌃⌘T)">☰</button>
+          <span class="pill-sep"></span>
+          <button class="tb ${S.open === 'appearance' ? 'on' : ''}" data-pop="appearance" title="Appearance (⌘T)">Aa</button>
+          <span class="pill-sep"></span>
+          <button class="tb" disabled style="opacity:.35" title="Search (later milestone)">⌕</button>
+          <button class="tb" disabled style="opacity:.35" title="Bookmark (later milestone)">🔖</button>
+        </div>
+      </div>
+      <div class="hud ${pinned}">
+        <input type="range" min="1" max="342" value="${S.page + 1}">
+        <span style="font:11px var(--sys-font);opacity:.7">${S.page + 1}/342</span>
+      </div>
+      <div class="text"`)}
+    <div class="popover ${S.open === 'toc' ? '' : 'hidden'}" style="top:46px;right:120px;width:250px;max-height:70%;overflow:auto">${tocHTML()}</div>
+    <div class="popover ${S.open === 'appearance' ? '' : 'hidden'}" style="top:46px;right:10px;width:300px">${appearanceHTML()}</div>
+    <div class="popover sel-pop hidden" id="selpop">${selPopHTML()}</div>
+  </div>`
+}
+
+// ---------- render ----------
+function render() {
+  applyTheme()
+  $('#menubar').innerHTML = MENUS(S.variant).map(([name, items]) => `<div class="menu">${name}<div class="dropdown">${items.map(it =>
+    it === '-' ? '<div class="sep"></div>' : `<div class="${it[2] ?? ''}"><span>${it[0]}</span><kbd>${it[1] ?? ''}</kbd></div>`).join('')}</div></div>`).join('')
+  $('#window').innerHTML = { A: renderA, B: renderB, C: renderC, D: renderD }[S.variant]()
+  $('#vlabel').textContent = `${S.variant} (${VARIANTS[S.variant]})`
+  $('#stateSel').value = S.view
+  reapplyHighlights()
+  $('#readout').textContent = JSON.stringify({
+    variant: S.variant, view: S.view, page: S.page + 1, theme: S.theme, mode: S.mode,
+    fontSize: FONT_STEPS[S.fontIdx], twoPages: S.twoPages, open: S.open,
+    ...(S.variant === 'B' ? { sidebar: S.sidebar, inspector: S.inspector } : {}),
+    highlights: S.highlights.map(h => `${h.color}: “${h.text.slice(0, 20)}…”`),
+  }, null, 1)
+}
+
+function reapplyHighlights() {
+  const text = $('#text'); if (!text) return
+  for (const h of S.highlights) if (h.page === S.page)
+    text.innerHTML = text.innerHTML.replace(h.text, `<mark class="${h.color}">${h.text}</mark>`)
+}
+
+function setVariant(v) {
+  S.variant = v; S.open = null
+  const u = new URL(location); u.searchParams.set('variant', v); history.replaceState(null, '', u)
+  render()
+}
+const cycle = d => { const ks = Object.keys(VARIANTS); setVariant(ks[(ks.indexOf(S.variant) + d + ks.length) % ks.length]) }
+
+// ---------- events ----------
+$('#prev').onclick = () => cycle(-1)
+$('#next').onclick = () => cycle(1)
+$('#stateSel').onchange = e => { S.view = e.target.value; render() }
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-act],[data-pop],[data-mode],[data-font],[data-two],[data-theme],[data-hl],[data-copy],.menu')
+  if (e.target.closest('.menu')) {
+    const m = e.target.closest('.menu'); const was = m.classList.contains('open')
+    document.querySelectorAll('.menu.open').forEach(x => x.classList.remove('open'))
+    if (!was) m.classList.add('open'); return
+  }
+  document.querySelectorAll('.menu.open').forEach(x => x.classList.remove('open'))
+  if (!t) {
+    if (!e.target.closest('.popover') && S.open) { S.open = null; render() }
+    return
+  }
+  const d = t.dataset
+  if (d.act === 'prev') S.page = Math.max(0, S.page - 1)
+  else if (d.act === 'next') S.page = S.page + 1
+  else if (d.act === 'sidebar') S.sidebar = !S.sidebar
+  else if (d.act === 'inspector') S.inspector = !S.inspector
+  else if (d.pop) S.open = S.open === d.pop ? null : d.pop
+  else if (d.mode) S.mode = d.mode
+  else if (d.font) S.fontIdx = Math.min(FONT_STEPS.length - 1, Math.max(0, S.fontIdx + +d.font))
+  else if (d.two) S.twoPages = d.two === '1'
+  else if (d.theme) S.theme = d.theme
+  else if (d.hl && S.selection) { S.highlights.push({ page: S.page, color: d.hl, text: S.selection }); S.selection = null; getSelection().removeAllRanges() }
+  else if ('copy' in d) { S.selection = null; getSelection().removeAllRanges() }
+  else return
+  render()
+})
+
+// show the selection popover above a text selection
+document.addEventListener('mouseup', e => {
+  if (e.target.closest('.popover,#switcher')) return
+  setTimeout(() => {
+    const sel = getSelection(), pop = $('#selpop'), text = $('#text')
+    if (!pop) return
+    if (!sel.rangeCount || sel.isCollapsed || !text?.contains(sel.anchorNode)) { pop.classList.add('hidden'); S.selection = null; return }
+    S.selection = sel.toString()
+    const r = sel.getRangeAt(0).getBoundingClientRect(), body = pop.parentElement.getBoundingClientRect()
+    pop.classList.remove('hidden')
+    pop.style.left = Math.max(4, r.left - body.left + r.width / 2 - pop.offsetWidth / 2) + 'px'
+    pop.style.top = Math.max(4, r.top - body.top - pop.offsetHeight - 8) + 'px'
+  })
+})
+
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input,textarea,select,[contenteditable]')) return
+  if (e.shiftKey && e.key === 'ArrowLeft') return cycle(-1)
+  if (e.shiftKey && e.key === 'ArrowRight') return cycle(1)
+  if (e.key === 'ArrowRight' || e.key === ' ') { S.page++; render() }
+  else if (e.key === 'ArrowLeft') { S.page = Math.max(0, S.page - 1); render() }
+  else if (e.key === 'Escape') { S.open = null; render() }
+  else if (e.metaKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); S.fontIdx = Math.min(FONT_STEPS.length - 1, S.fontIdx + 1); render() }
+  else if (e.metaKey && e.key === '-') { e.preventDefault(); S.fontIdx = Math.max(0, S.fontIdx - 1); render() }
+})
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render)
+
+render()
+</script>
+</body>
+</html>
