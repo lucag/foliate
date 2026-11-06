@@ -37,3 +37,7 @@ What exactly does the reader-only macOS app (see the Answer in `06-choose-approa
   4. A round trip with the user's Linux Foliate keeps progress and highlights intact in both directions.
   5. The PDF speed targets are met.
   6. The universal build is verified with `lipo` and runs on Intel. Apple Silicon testing moves to packaging, since the user has no Apple Silicon Mac.
+
+## Comments
+
+The "Interface" bullet above is superseded by the Answer in `09-design-reader-window.md`. There is no toolbar and no back/next buttons: an immersive window with a top pill (TOC, Aa) and a slider-only bottom overlay.
